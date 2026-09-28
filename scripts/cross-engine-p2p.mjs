@@ -10,7 +10,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices, webkit } from 'playwright-core';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FILE = pathToFileURL(join(root, 'dist-single', 'right-there.html')).href;
+const arg = (name, fallback) => {
+  const k = process.argv.indexOf(`--${name}`);
+  return k > 0 ? process.argv[k + 1] : fallback;
+};
+const FILE = arg('url', pathToFileURL(join(root, 'dist-single', 'right-there.html')).href);
 const code = async (p) => (await p.locator('.pair-qr[data-code]').first().getAttribute('data-code')) ?? '';
 const engines = {
   chrome: () => chromium.launch({ channel: 'chrome', headless: true }),

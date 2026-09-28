@@ -210,7 +210,7 @@ export function HostPairing({
             </p>
           )}
           {link ? (
-            <div className="pair-qr" data-code={offer?.code}>
+            <div className="pair-qr" data-code={offer?.code} data-link={link.text}>
               <QR text={link.text} size={compact ? 220 : 260} ecc="L" />
               <div className="row center-row">
                 <CopyButton text={link.text} label={link.isLink ? 'Copy link' : 'Copy code'} />

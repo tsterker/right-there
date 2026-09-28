@@ -13,11 +13,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices } from 'playwright-core';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FILE = pathToFileURL(join(root, 'dist-single', 'right-there.html')).href;
-const i = process.argv.indexOf('--out');
-const OUT = i > 0 ? process.argv[i + 1] : '/tmp/mb-p2p';
+const arg = (name, fallback) => {
+  const k = process.argv.indexOf(`--${name}`);
+  return k > 0 ? process.argv[k + 1] : fallback;
+};
+const LOCAL = pathToFileURL(join(root, 'dist-single', 'right-there.html')).href;
+/** Where the laptop opens the app (default: the file on disk) and where the phone does (e.g. the live site). */
+const FILE = arg('host-url', LOCAL);
+const GUEST = arg('guest-url', FILE);
+const OUT = arg('out', '/tmp/mb-p2p');
 mkdirSync(OUT, { recursive: true });
-if (!existsSync(fileURLToPath(FILE))) throw new Error('Run "npm run build:single" first.');
+if (FILE === LOCAL && !existsSync(fileURLToPath(LOCAL))) throw new Error('Run "npm run build:single" first.');
 
 const CAM = join(OUT, 'fake-camera.y4m');
 if (existsSync(CAM)) unlinkSync(CAM);
@@ -69,11 +75,13 @@ try {
   await mac.waitForSelector('.pair-qr[data-code]');
   const offer = await codeOf(mac);
   check(offer.length > 80 && offer.length < 320, `first code is compact (${offer.length} chars)`);
+  const qrLink = (await mac.locator('.pair-qr[data-link]').first().getAttribute('data-link')) ?? '';
+  console.log(`     the QR code contains: ${qrLink.startsWith('http') ? qrLink.replace(offer, '<code>') : '(bare code, no app address)'}`);
   await shot(mac, 'mac-pairing');
 
   console.log('2. Phone: opens the link from the QR code (here: the same file), answers');
   const phone = watch('phone', await (await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 2 })).newPage());
-  await phone.goto(`${FILE}#/p2p/join/${offer}`);
+  await phone.goto(`${GUEST}#/p2p/join/${offer}`);
   await phone.waitForSelector('.pair-qr[data-code]');
   const reply = await codeOf(phone);
   check(reply.length > 80, `reply code is compact (${reply.length} chars)`);
@@ -136,7 +144,7 @@ try {
   await mac.getByRole('button', { name: 'Reconnect' }).click();
   await mac.waitForSelector('.sheet .pair-qr[data-code]');
   const offer2 = await codeOf(mac);
-  await phone.goto(`${FILE}#/p2p/join/${offer2}`);
+  await phone.goto(`${GUEST}#/p2p/join/${offer2}`);
   await phone.waitForSelector('.pair-qr[data-code]');
   await mac.fill('.sheet .paste-row input', await codeOf(phone));
   await mac.locator('.sheet').getByRole('button', { name: 'Connect' }).click();
@@ -152,7 +160,7 @@ try {
   await mac2.locator('.pair-qr .qr').screenshot({ path: qr });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-loop', '1', '-i', qr, '-t', '2', '-vf', 'scale=480:480,pad=640:480:80:0:white', '-pix_fmt', 'yuv420p', CAM]);
   const phone2 = watch('phone2', await (await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 2 })).newPage());
-  await phone2.goto(`${FILE}#/p2p/scan`);
+  await phone2.goto(`${GUEST}#/p2p/scan`);
   await phone2.getByRole('button', { name: /Scan their code/ }).click();
   await phone2.waitForSelector('.pair-qr[data-code]', { timeout: 20000 });
   check(true, 'in-app camera read the QR code and produced a reply');

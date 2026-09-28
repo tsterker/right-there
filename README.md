@@ -15,13 +15,15 @@ Guide a massage from your phone without saying a word.
 
 ## Try it without any server
 
-`npm run build:single` makes **one self-contained file**, `dist-single/right-there.html`, of about 560 KB.
+**Live: https://tsterker.github.io/right-there/** — open it on both devices, pick a role on one, and scan its QR code with the other.
+
+`npm run build:single` makes the same thing as **one self-contained file**, `dist-single/right-there.html` (about 560 KB). Saving the live page gives you the same file.
 
 - **Double-click it on a laptop**, pick a role, and pair a phone:
   1. The phone scans the QR code on the laptop screen with its camera.
   2. The phone shows a reply QR code. Hold it up to the laptop's webcam and tap *Scan their code*, or copy and paste the code (on Apple devices the clipboard syncs).
   3. The devices are connected directly. Nothing runs on a server, and session data never leaves the Wi-Fi.
-- **The phone still needs to load the page from somewhere.** Put the same file on any static host, e.g. GitHub Pages. The workflow in `.github/workflows/pages.yml` publishes it on every push to `main` and bakes the Pages address in, so a scanned QR code opens the app straight into pairing.
+- **The phone loads the page from GitHub Pages.** The workflow in `.github/workflows/pages.yml` runs the tests and republishes on every push to `main`. The Pages address (`.env.single`) is built into every copy of the file, so a scanned QR code opens the live app straight into pairing.
 - **Until it's hosted**, `npm run share` also rebuilds the file so phones load the page through your laptop's tunnel link; the session itself still runs device to device. Alternatively, enter any address where the app is hosted under *Where does the other device open Right There?*
 - **Requirements:**
   - Both devices on the same Wi-Fi, or one phone's hotspot. Guest and hotel Wi-Fi often block devices from reaching each other.
@@ -136,6 +138,8 @@ npm test           # unit + relay integration tests (vitest)
 npm run typecheck
 npm run dev & npm run e2e   # two simulated phones in headless Chrome play a whole session and save screenshots to /tmp/mb-shots
 npm run e2e:p2p             # no-server: file:// host + phone over WebRTC, camera QR scan, then Chrome ↔ WebKit (Safari engine) pairing
+node scripts/walkthrough-p2p.mjs --guest-url https://tsterker.github.io/right-there/   # laptop = local file, phone = live site
+node scripts/cross-engine-p2p.mjs --url https://tsterker.github.io/right-there/
 ```
 
 The cross-engine check needs Playwright's WebKit once: `npx playwright-core install webkit`.

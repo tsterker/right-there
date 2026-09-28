@@ -65,8 +65,3 @@ export function useKeepAwake() {
     };
   }, []);
 }
-
-export const secureContextHint = () =>
-  window.isSecureContext
-    ? null
-    : 'This page is not on HTTPS, so the browser may not keep the screen on. Use the https:// link from the server output, or set Auto-Lock to "Never" for this session.';

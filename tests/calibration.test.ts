@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bodyToScreen,
   correct,
-  coverageGaps,
   describeOrientation,
-  evaluateCorrection,
   fitCorrection,
   orientationFromSwipes,
   screenToBody,
@@ -68,12 +66,7 @@ describe('orientationFromSwipes', () => {
   });
 });
 
-const pt = (raw: Vec, truth: Vec, i: number, source: CalibPoint['source'] = 'landmark'): CalibPoint => ({
-  raw,
-  truth,
-  at: 1000 + i,
-  source,
-});
+const pt = (raw: Vec, truth: Vec, i: number): CalibPoint => ({ raw, truth, at: 1000 + i });
 
 describe('map correction', () => {
   it('is the identity without points', () => {
@@ -110,17 +103,6 @@ describe('map correction', () => {
     expect(before).toBeGreaterThan(4);
     // The local correction is deliberately conservative (robust to noisy taps), so allow ~1.5 cm.
     expect(after).toBeLessThan(2);
-
-    const q = evaluateCorrection(points);
-    expect(q.n).toBe(8);
-    expect(q.rawErrorCm!).toBeGreaterThan(3);
-    expect(q.errorCm!).toBeLessThan(q.rawErrorCm! / 2);
-  });
-
-  it('needs three points before it reports a precision', () => {
-    const points = [pt({ x: 1, y: 1 }, { x: 0, y: 0 }, 0), pt({ x: 11, y: 11 }, { x: 12, y: 10 }, 1)];
-    expect(evaluateCorrection(points)).toMatchObject({ n: 2, errorCm: null });
-    expect(evaluateCorrection(points).rawErrorCm).toBeGreaterThan(0);
   });
 
   it('prefers recent points when the receiver changes their habit', () => {
@@ -129,10 +111,5 @@ describe('map correction', () => {
     const model = fitCorrection([...old, ...recent]);
     const c = correct(model, { x: 0, y: 20 });
     expect(Math.abs(c.x)).toBeLessThan(2.5);
-  });
-
-  it('reports coverage gaps', () => {
-    expect(coverageGaps([])).toHaveLength(4);
-    expect(coverageGaps([pt({ x: 0, y: 0 }, { x: -12, y: 10 }, 0)])).not.toContain('upper-left');
   });
 });

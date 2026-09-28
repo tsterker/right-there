@@ -1,9 +1,9 @@
 /**
- * No-server pairing across browser engines: Chrome (desktop) and WebKit
+ * Pairing and pointing across browser engines: Chrome (desktop) and WebKit
  * (Safari's engine, iPhone-sized) in every combination. Needs Playwright's
  * WebKit once:  npx playwright-core install webkit
  *
- *   npm run build:single && node scripts/cross-engine-p2p.mjs
+ *   npm run build && node scripts/e2e-engines.mjs [--url https://…]
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,14 +14,21 @@ const arg = (name, fallback) => {
   const k = process.argv.indexOf(`--${name}`);
   return k > 0 ? process.argv[k + 1] : fallback;
 };
-const FILE = arg('url', pathToFileURL(join(root, 'dist-single', 'right-there.html')).href);
+const FILE = arg('url', pathToFileURL(join(root, 'dist', 'right-there.html')).href);
 const code = async (p) => (await p.locator('.pair-qr[data-code]').first().getAttribute('data-code')) ?? '';
 const engines = {
   chrome: () => chromium.launch({ channel: 'chrome', headless: true }),
   webkit: () => webkit.launch({ headless: true }),
 };
-let failed = 0;
 
+async function drag(page, from, to) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 16 });
+  await page.mouse.up();
+}
+
+let failed = 0;
 async function run(hostEngine, guestEngine) {
   const hb = await engines[hostEngine]();
   const gb = await engines[guestEngine]();
@@ -38,27 +45,32 @@ async function run(hostEngine, guestEngine) {
     await host.fill('.paste-row input', await code(guest));
     const t0 = Date.now();
     await host.getByRole('button', { name: 'Connect' }).click();
-    await guest.waitForSelector('.checkin', { timeout: 20000 });
-    await host.waitForSelector('.brief', { timeout: 20000 });
+    await guest.waitForSelector('.setup-intro', { timeout: 20000 });
+    await host.waitForSelector('.giver-live', { timeout: 20000 });
     const ms = Date.now() - t0;
-    await guest.getByRole('radio', { name: /Knot/ }).click();
-    const box = await guest.locator('.checkin-map svg.map').boundingBox();
-    await guest.touchscreen.tap(box.x + box.width * 0.6, box.y + box.height * 0.3);
-    await host.waitForSelector('.brief-map .map-marker', { timeout: 5000 });
-    await guest.getByRole('button', { name: /set up pointing/i }).click();
-    await guest.getByRole('button', { name: /Skip — start massage/i }).click();
-    await host.waitForSelector('.giver-live', { timeout: 5000 });
-    await guest.getByRole('button', { name: /Firmer/ }).click();
-    await host.waitForSelector('.banner-firmer', { timeout: 5000 });
-    await host.getByRole('button', { name: /More/ }).click();
-    await host.getByRole('button', { name: /End session/ }).click();
-    await host.getByRole('button', { name: /Yes, end session/ }).click();
-    await guest.waitForSelector('.summary', { timeout: 5000 });
+    await host.getByRole('radio', { name: /At their feet/ }).click();
+
+    await guest.getByRole('button', { name: 'Start the two swipes' }).click();
+    const box = await guest.locator('.swipe-area').boundingBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await drag(guest, { x: cx, y: box.y + box.height * 0.3 }, { x: cx, y: box.y + box.height * 0.75 });
+    await guest.getByText('Swipe 2 of 2').waitFor({ timeout: 5000 });
+    await drag(guest, { x: box.x + box.width * 0.15, y: cy }, { x: box.x + box.width * 0.85, y: cy });
+    await guest.waitForSelector('.receiver-pad', { timeout: 5000 });
+
+    const pad = await guest.locator('.touchpad').boundingBox();
+    await drag(guest, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 }, { x: pad.x + pad.width * 0.7, y: pad.y + pad.height * 0.35 });
+    await host.waitForSelector('.nudge-chip', { timeout: 5000 });
+    await guest.getByRole('button', { name: /Right there/ }).click();
+    await host.waitForSelector('.banner-good', { timeout: 5000 });
+
+    await guest.getByRole('button', { name: 'More' }).click();
     await guest.getByRole('button', { name: /Swap roles/ }).click();
-    await guest.waitForSelector('.brief', { timeout: 8000 });
-    await host.waitForSelector('.checkin', { timeout: 8000 });
+    await guest.waitForSelector('.giver-live', { timeout: 8000 });
+    await host.waitForSelector('.setup-intro', { timeout: 8000 });
     if (errors.length) throw new Error(errors.join('; '));
-    console.log(`✓ ${hostEngine} hosts ↔ ${guestEngine} joins: connected in ${ms} ms; marks, feedback and swap flow`);
+    console.log(`✓ ${hostEngine} hosts ↔ ${guestEngine} joins: connected in ${ms} ms; swipes, nudge, right there, swap`);
   } catch (e) {
     failed += 1;
     console.log(`✗ ${hostEngine} hosts ↔ ${guestEngine} joins: ${e.message.split('\n')[0]}`);

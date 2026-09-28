@@ -3,7 +3,6 @@ import { persisted, usePersisted } from './storage';
 export interface ReceiverSettings {
   dim: boolean;
   haptics: boolean;
-  sounds: boolean;
   /** Quietly say the area name when the spot settles somewhere new (eyes-free). */
   speak: boolean;
 }
@@ -11,14 +10,13 @@ export interface ReceiverSettings {
 export interface GiverSettings {
   /** Clockwise rotation of the map so it matches where the giver stands. */
   viewAngle: 0 | 90 | 180 | 270;
+  /** Picked the standing position at least once (else ask). */
+  viewChosen: boolean;
   voice: boolean;
-  sounds: boolean;
-  /** Show full technique details (otherwise a compact card, leaving room for the map). */
-  details: boolean;
 }
 
-export const receiverSettings = persisted<ReceiverSettings>('mb.settings.A', { dim: false, haptics: true, sounds: false, speak: false });
-export const giverSettings = persisted<GiverSettings>('mb.settings.B', { viewAngle: 0, voice: false, sounds: true, details: false });
+export const receiverSettings = persisted<ReceiverSettings>('mb.settings.A', { dim: false, haptics: true, speak: false });
+export const giverSettings = persisted<GiverSettings>('mb.settings.B', { viewAngle: 0, viewChosen: false, voice: false });
 
 export const useReceiverSettings = () => usePersisted(receiverSettings);
 export const useGiverSettings = () => usePersisted(giverSettings);

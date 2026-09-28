@@ -1,5 +1,5 @@
 /**
- * Pairing without a server: the host shows a first code, the partner answers
+ * Pairing: the host shows a first code, the partner answers
  * with a second one. Codes travel as QR codes (camera) or copy/paste.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -9,7 +9,8 @@ import { QR } from '../../components/ui';
 import { useLatest } from '../../lib/connection';
 import { navigate } from '../../lib/router';
 import { usePersisted } from '../../lib/storage';
-import { joinLink, openedFromFile, p2pSettings } from '../../p2p/address';
+import { joinLink, p2pSettings } from '../../p2p/address';
+import { announce, isDemo, listen } from '../../p2p/demo';
 import { createAnswer, createOffer, type GuestAnswer, type HostOffer } from '../../p2p/peer';
 import { decodeSignal } from '../../p2p/signal';
 
@@ -101,33 +102,6 @@ function NetworkOptions() {
   );
 }
 
-function AppAddress() {
-  const [settings, set] = usePersisted(p2pSettings);
-  const [draft, setDraft] = useState(settings.appUrl);
-  if (!openedFromFile()) return null;
-  return (
-    <details className="pair-options" open={!settings.appUrl && !import.meta.env.VITE_APP_URL}>
-      <summary>Where does the other device open Right There?</summary>
-      <p className="hint">
-        This page runs from a file. If the app is also online (e.g. GitHub Pages), enter its address and the QR code will
-        open it directly on the phone.
-      </p>
-      <form
-        className="paste-row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          set({ appUrl: draft.trim() });
-        }}
-      >
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="https://you.github.io/right-there/" />
-        <button className="btn" type="submit">
-          Save
-        </button>
-      </form>
-    </details>
-  );
-}
-
 /** Host: show the first code, then read the partner's reply. */
 export function HostPairing({
   role,
@@ -157,11 +131,11 @@ export function HostPairing({
     setError(null);
     used.current = false;
     createOffer(role, { stun: settings.stun }).then(
-      async (o) => {
+      (o) => {
         if (!alive) return o.close();
         current = o;
         setOffer(o);
-        setLink(await joinLink(o.code));
+        setLink(joinLink(o.code));
       },
       (e: Error) => alive && setError(e.message),
     );
@@ -169,7 +143,18 @@ export function HostPairing({
       alive = false;
       if (current && !used.current) current.close();
     };
-  }, [role, settings.stun, settings.appUrl, attempt]);
+  }, [role, settings.stun, attempt]);
+
+  // Dev demo: the other frame answers over a BroadcastChannel.
+  useEffect(() => {
+    if (!offer || !isDemo()) return;
+    const stopAnnounce = announce({ kind: 'offer', code: offer.code });
+    const stopListen = listen('answer', (code) => void acceptRef.current(code));
+    return () => {
+      stopAnnounce();
+      stopListen();
+    };
+  }, [offer]);
 
   const accept = async (text: string) => {
     if (!offer) return;
@@ -185,14 +170,13 @@ export function HostPairing({
     }
   };
 
+  const acceptRef = useLatest(accept);
   const partner = ROLE_NAME[otherRole(role)].toLowerCase();
   return (
     <div className={`pairing${compact ? ' is-compact' : ''}`}>
       {!compact && (
         <header className="screen-head">
-          <p className="eyebrow">
-            No server · you are the {ROLE_NAME[role].toLowerCase()}
-          </p>
+          <p className="eyebrow">You are the {ROLE_NAME[role].toLowerCase()}</p>
           <h1>Connect the other device</h1>
         </header>
       )}
@@ -203,12 +187,6 @@ export function HostPairing({
               ? `On the ${partner}’s device, open Right There, tap “Scan their code” and point it here.`
               : `On the ${partner}’s device, scan this with the camera.`}
           </strong>
-          {link && !link.isLink && (
-            <p className="notice small">
-              The phone’s normal camera app can’t open this code — it would only search the web for it. Once the app is online
-              (e.g. on GitHub Pages) or its address is set below, this becomes a link the camera opens directly.
-            </p>
-          )}
           {link ? (
             <div className="pair-qr" data-code={offer?.code} data-link={link.text}>
               <QR text={link.text} size={compact ? 220 : 260} ecc="L" />
@@ -230,7 +208,6 @@ export function HostPairing({
         </li>
       </ol>
       {error && <p className="notice">{error}</p>}
-      <AppAddress />
       <NetworkOptions />
       {onCancel && (
         <button className="btn link" onClick={onCancel}>
@@ -262,6 +239,7 @@ export function GuestPairing({
     let alive = true;
     let current: GuestAnswer | null = null;
     let used = false;
+    let stopAnnounce = () => {};
     setAnswer(null);
     setError(null);
     createAnswer(offerCode, { stun: settings.stun }).then(
@@ -269,6 +247,8 @@ export function GuestPairing({
         if (!alive) return a.close();
         current = a;
         setAnswer(a);
+        stopAnnounce = announce({ kind: 'answer', code: a.code });
+        a.opened.finally(() => stopAnnounce());
         a.opened.then(
           (channel) => {
             if (!alive) return;
@@ -282,6 +262,7 @@ export function GuestPairing({
     );
     return () => {
       alive = false;
+      stopAnnounce();
       if (current && !used) current.close();
     };
   }, [offerCode, settings.stun, connected]);
@@ -291,7 +272,7 @@ export function GuestPairing({
     <div className={`pairing${compact ? ' is-compact' : ''}`}>
       {!compact && (
         <header className="screen-head">
-          <p className="eyebrow">No server{role && ` · you will be the ${ROLE_NAME[role].toLowerCase()}`}</p>
+          <p className="eyebrow">{role ? `You will be the ${ROLE_NAME[role].toLowerCase()}` : 'Joining'}</p>
           <h1>Almost there</h1>
         </header>
       )}
@@ -347,6 +328,17 @@ export function ScanFirstCode({ onOffer }: { onOffer: (code: string) => void }) 
         }}
       />
       {error && <p className="notice">{error}</p>}
+    </div>
+  );
+}
+
+/** Dev demo: wait for the host frame's first code, then answer it. */
+export function DemoJoin() {
+  useEffect(() => listen('offer', (code) => navigate(`/p2p/join/${code}`, true)), []);
+  return (
+    <div className="screen center-screen">
+      <div className="spinner" aria-hidden />
+      <p>Waiting for the other frame…</p>
     </div>
   );
 }

@@ -1,25 +1,21 @@
 /**
- * One phone's link to the session's authority — the relay server, or in
- * no-server mode the device that hosts the session. Keeps a replica of the
- * session state by applying the same sequenced actions; resends what wasn't
- * confirmed and resyncs from a snapshot when needed.
+ * This device's link to the session's authority (the hosting device). Keeps
+ * a replica of the session state by applying the same sequenced actions;
+ * resends what wasn't confirmed and resyncs from a snapshot when needed.
  *
- * The transport is a pluggable Link: WebSocket (reconnects by itself), a
- * WebRTC data channel (reopens after re-pairing), or in-page for the host.
+ * The transport is a Link: in-page for the host's own screen, or the WebRTC
+ * data channel for the partner (it reopens after re-pairing).
  */
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
-import { WS_PATH, type ClientMsg, type ServerMsg } from '../../shared/protocol';
+import type { ClientMsg, ServerMsg } from '../../shared/protocol';
 import { isEphemeral, reduce, type Action, type Role, type SessionState } from '../../shared/session';
-import { navigate } from './router';
-import { saveToken } from './storage';
 
-export type ConnStatus = 'connecting' | 'online' | 'reconnecting' | 'failed';
+export type ConnStatus = 'connecting' | 'online' | 'reconnecting';
 
 export interface ConnSnapshot {
   status: ConnStatus;
   state: SessionState | null;
-  error: { code: string; message: string } | null;
-  /** Can change in no-server mode when the roles are swapped. */
+  /** Changes when the roles are swapped. */
   role: Role;
   code: string;
 }
@@ -30,62 +26,16 @@ export interface LinkHandlers {
   /** Ready to talk; `send` goes to the session's authority. */
   open(send: (msg: ClientMsg) => void): void;
   message(msg: ServerMsg): void;
-  closed(fatal: boolean): void;
+  closed(): void;
 }
 
 export interface Link {
-  /** Reconnects by itself (WebSocket). Peer links reopen only after re-pairing. */
-  readonly autoRetry: boolean;
   connect(handlers: LinkHandlers): void;
   close(): void;
 }
 
-/** Close codes after which retrying makes no sense. */
-const FATAL = new Set([4403, 4404, 4409]);
-const FATAL_ERRORS = new Set(['room-not-found', 'bad-token', 'replaced']);
-const STALE_MS = 12_000;
-const CONNECT_TIMEOUT_MS = 8_000;
-/** How long an unconfirmed action stays worth (re)sending. "Firmer!" is only useful right away. */
-const maxAge = (a: Action) => (a.type === 'feedback' || a.type === 'target' ? 8_000 : 60_000);
-
-/** WebSocket to the relay on the page's own server. */
-export function webSocketLink(): Link {
-  let ws: WebSocket | null = null;
-  return {
-    autoRetry: true,
-    connect(h) {
-      const old = ws;
-      ws = null;
-      if (old && old.readyState <= WebSocket.OPEN) old.close();
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const sock = new WebSocket(`${proto}://${location.host}${WS_PATH}`);
-      ws = sock;
-      sock.onopen = () => {
-        if (ws === sock) h.open((msg) => sock.readyState === WebSocket.OPEN && sock.send(JSON.stringify(msg)));
-      };
-      sock.onmessage = (e) => {
-        if (ws !== sock) return;
-        let msg: ServerMsg;
-        try {
-          msg = JSON.parse(String(e.data));
-        } catch {
-          return;
-        }
-        h.message(msg);
-      };
-      sock.onclose = (e) => {
-        if (ws !== sock) return;
-        ws = null;
-        h.closed(FATAL.has(e.code));
-      };
-    },
-    close() {
-      const sock = ws;
-      ws = null;
-      if (sock && sock.readyState <= WebSocket.OPEN) sock.close(1000);
-    },
-  };
-}
+/** How long an unconfirmed action stays worth (re)sending. "Right there" is only useful right away. */
+const maxAge = (a: Action) => (a.type === 'good' || a.type === 'target' ? 8_000 : 60_000);
 
 interface Pending {
   id: string;
@@ -104,11 +54,7 @@ export class SessionConnection {
   private pending: Pending[] = [];
   private readonly instance = Math.random().toString(36).slice(2, 8);
   private counter = 0;
-  private attempt = 0;
-  private retryTimer: number | undefined;
-  private connectTimer: number | undefined;
-  private pingTimer: number | undefined;
-  private lastMessageAt = 0;
+  private pingTimer: ReturnType<typeof setInterval> | undefined;
   private bestRtt = Infinity;
   private started = false;
   /** Authority's clock minus local clock (ms). */
@@ -117,10 +63,9 @@ export class SessionConnection {
   constructor(
     code: string,
     role: Role,
-    private readonly token: string,
-    private readonly link: Link = webSocketLink(),
+    private readonly link: Link,
   ) {
-    this.snap = { status: 'connecting', state: null, error: null, role, code };
+    this.snap = { status: 'connecting', state: null, role, code };
   }
 
   get role() {
@@ -130,30 +75,29 @@ export class SessionConnection {
   start() {
     if (this.started) return;
     this.started = true;
-    if (this.link.autoRetry) {
-      document.addEventListener('visibilitychange', this.wake);
-      window.addEventListener('online', this.wake);
-    }
-    this.connect();
+    this.link.connect({
+      open: (send) => {
+        if (!this.started) return;
+        this.sendFn = send;
+        send({ t: 'hello' });
+      },
+      message: (msg) => {
+        if (this.started) this.onMessage(msg);
+      },
+      closed: () => {
+        if (!this.started) return;
+        this.sendFn = null;
+        clearInterval(this.pingTimer);
+        this.set({ status: this.snap.state ? 'reconnecting' : 'connecting' });
+      },
+    });
   }
 
   stop() {
     this.started = false;
-    document.removeEventListener('visibilitychange', this.wake);
-    window.removeEventListener('online', this.wake);
-    window.clearTimeout(this.retryTimer);
-    window.clearTimeout(this.connectTimer);
-    window.clearInterval(this.pingTimer);
+    clearInterval(this.pingTimer);
     this.sendFn = null;
     this.link.close();
-  }
-
-  /** Reconnect after being replaced by another tab/device. */
-  reclaim() {
-    this.set({ error: null, status: 'connecting' });
-    this.attempt = 0;
-    if (!this.started) this.start();
-    else this.connect();
   }
 
   /** Continue with the roles reversed. */
@@ -177,7 +121,7 @@ export class SessionConnection {
     };
   }
 
-  /** Session time, for timers shared by both phones. */
+  /** Session time (the host's clock), for comparing with timestamps in the state. */
   now = () => Date.now() + this.offset;
 
   dispatch = (a: Action) => {
@@ -204,81 +148,18 @@ export class SessionConnection {
     this.sendFn?.(msg);
   }
 
-  private connect() {
-    if (!this.started) return;
-    window.clearTimeout(this.retryTimer);
-    window.clearTimeout(this.connectTimer);
-    window.clearInterval(this.pingTimer);
-    this.sendFn = null;
-    if (this.snap.status === 'online') this.set({ status: 'reconnecting' });
-    this.lastMessageAt = Date.now();
-    if (this.link.autoRetry) {
-      // A stalled handshake (flaky Wi-Fi) should not hang for a minute.
-      this.connectTimer = window.setTimeout(() => {
-        if (this.snap.status !== 'online') {
-          this.link.close();
-          this.lost(false);
-        }
-      }, CONNECT_TIMEOUT_MS);
-    }
-    this.link.connect({
-      open: (send) => {
-        if (!this.started) return;
-        this.sendFn = send;
-        send({ t: 'hello', code: this.snap.code, role: this.snap.role, token: this.token });
-      },
-      message: (msg) => {
-        if (!this.started) return;
-        this.lastMessageAt = Date.now();
-        this.onMessage(msg);
-      },
-      closed: (fatal) => {
-        if (this.started) this.lost(fatal);
-      },
-    });
-  }
-
-  /** Forget the current connection and either give up, retry, or wait to be re-paired. */
-  private lost(fatal: boolean) {
-    this.sendFn = null;
-    window.clearInterval(this.pingTimer);
-    window.clearTimeout(this.connectTimer);
-    if (fatal) {
-      this.set({ status: 'failed' });
-      return;
-    }
-    if (!this.started) return;
-    this.set({ status: this.snap.state ? 'reconnecting' : 'connecting' });
-    if (!this.link.autoRetry) return;
-    const delay = Math.min(4000, 300 * 2 ** this.attempt) * (0.8 + Math.random() * 0.4);
-    this.attempt += 1;
-    this.retryTimer = window.setTimeout(() => this.connect(), delay);
-  }
-
-  private wake = () => {
-    if (document.visibilityState !== 'visible' || !this.started || this.snap.status === 'failed') return;
-    if (!this.sendFn || Date.now() - this.lastMessageAt > STALE_MS) {
-      this.attempt = 0;
-      this.connect();
-    } else {
-      this.send({ t: 'ping', c: Date.now() });
-    }
-  };
-
   private onMessage(msg: ServerMsg) {
     switch (msg.t) {
       case 'welcome': {
-        window.clearTimeout(this.connectTimer);
-        this.attempt = 0;
         this.seq = msg.seq;
         this.syncing = false;
         this.offset = msg.now - Date.now();
         this.bestRtt = Infinity;
-        // A different room (roles swapped in no-server mode): nothing pending belongs there.
+        // A different room (roles swapped): nothing pending belongs there.
         if (msg.code !== this.snap.code) this.pending = [];
         const acked = new Set(msg.acked ?? []);
         this.pending = this.pending.filter((p) => !acked.has(p.id));
-        this.set({ status: 'online', state: msg.state, error: null, role: msg.role, code: msg.code });
+        this.set({ status: 'online', state: msg.state, role: msg.role, code: msg.code });
         this.resend();
         this.startPing();
         return;
@@ -311,13 +192,8 @@ export class SessionConnection {
         }
         return;
       }
-      case 'moved':
-        saveToken(msg.code, msg.role, msg.token);
-        navigate(`/s/${msg.code}/${msg.role}`, true);
-        return;
       case 'error':
-        if (FATAL_ERRORS.has(msg.code)) this.set({ error: { code: msg.code, message: msg.message } });
-        else console.warn(`[right-there] ${msg.code}: ${msg.message}`);
+        console.warn(`[right-there] ${msg.code}: ${msg.message}`);
         return;
     }
   }
@@ -329,18 +205,11 @@ export class SessionConnection {
     for (const p of this.pending) this.send({ t: 'act', a: p.a, id: p.id });
   }
 
+  /** Keeps the clock offset fresh (timestamps in the state are the host's). */
   private startPing() {
-    window.clearInterval(this.pingTimer);
+    clearInterval(this.pingTimer);
     this.send({ t: 'ping', c: Date.now() });
-    this.pingTimer = window.setInterval(() => {
-      if (this.link.autoRetry && Date.now() - this.lastMessageAt > STALE_MS) {
-        // Half-open socket (typical after a phone sleeps): drop it and reconnect.
-        this.link.close();
-        this.lost(false);
-        return;
-      }
-      this.send({ t: 'ping', c: Date.now() });
-    }, 4000);
+    this.pingTimer = setInterval(() => this.send({ t: 'ping', c: Date.now() }), 10_000);
   }
 }
 
@@ -361,10 +230,6 @@ export function useConnection(create: () => SessionConnection): SessionApi {
   return { ...snap, conn, dispatch: conn.dispatch, now: conn.now };
 }
 
-export function useSessionConnection(code: string, role: Role, token: string): SessionApi {
-  return useConnection(() => new SessionConnection(code, role, token));
-}
-
 export const SessionContext = createContext<SessionApi | null>(null);
 
 export function useSession(): SessionApi & { state: SessionState } {
@@ -373,7 +238,7 @@ export function useSession(): SessionApi & { state: SessionState } {
   return api as SessionApi & { state: SessionState };
 }
 
-/** Subscribe to actions as they arrive (for sounds, speech, haptics). */
+/** Subscribe to actions as they arrive (for speech and haptics). */
 export function useActions(listener: ActionListener) {
   const api = useContext(SessionContext);
   const conn = api?.conn;

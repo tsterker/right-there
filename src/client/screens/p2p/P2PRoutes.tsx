@@ -1,36 +1,42 @@
 /**
- * No-server sessions. The host device runs the session; the partner connects
- * over a direct WebRTC link. After pairing, the same screens as with a server.
+ * Sessions. The host device runs the session; the partner connects over a
+ * direct WebRTC link. After pairing: the receiver's pad or the giver's map.
  */
 import { useEffect, useState } from 'react';
 import { otherRole, ROLE_NAME, type Role } from '../../../shared/session';
-import { Sheet } from '../../components/ui';
+import { Loading, Sheet } from '../../components/ui';
 import { SessionConnection, SessionContext, useConnection, useSession } from '../../lib/connection';
 import { navigate } from '../../lib/router';
 import { useKeepAwake } from '../../lib/wakeLock';
 import { ChannelLink, PeerHost } from '../../p2p/host';
 import { extractCode } from '../../p2p/signal';
-import { Loading } from '../Join';
-import { SessionScreens } from '../Session';
+import { GiverLive } from '../giver/Live';
+import { Receiver } from '../receiver/Receiver';
 import { GuestPairing, HostPairing, ScanFirstCode } from './Pairing';
+
+function SessionScreens() {
+  const { role } = useSession();
+  return role === 'A' ? <Receiver /> : <GiverLive />;
+}
 
 /** `#/p2p/host/A`: this device hosts; show pairing until the partner is connected. */
 export function P2PHostRoute({ role }: { role: Role }) {
   const [host] = useState(() => new PeerHost(role));
-  const api = useConnection(() => new SessionConnection(host.code, host.role, '', host.localLink()));
+  const api = useConnection(() => new SessionConnection(host.code, host.role, host.localLink()));
   useKeepAwake();
   useEffect(() => () => host.close(), [host]);
   const [repair, setRepair] = useState(false);
 
   if (!api.state) return <Loading text="Starting…" />;
-  const partnerHere = api.state.members[otherRole(api.role)].connected;
+  const partner = api.state.members[otherRole(api.role)];
+  const partnerHere = partner.connected;
   const attach = (channel: RTCDataChannel, dispose: () => void) => {
     host.attachPartner(channel, dispose);
     setRepair(false);
   };
   return (
     <SessionContext.Provider value={api}>
-      {api.state.phase === 'lobby' ? (
+      {!partner.joined ? (
         <div className="screen p2p">
           <div className="scroll">
             <HostPairing role={api.role} onConnected={attach} onCancel={() => navigate('/')} />
@@ -81,7 +87,7 @@ export function P2PJoinRoute({ code }: { code: string }) {
 }
 
 function GuestSession({ link, role }: { link: ChannelLink; role: Role }) {
-  const api = useConnection(() => new SessionConnection('', role, '', link));
+  const api = useConnection(() => new SessionConnection('', role, link));
   useKeepAwake();
   if (!api.state) return <Loading text="Joining the session…" />;
   return (
@@ -130,7 +136,7 @@ export function P2PScanRoute() {
     <div className="screen p2p">
       <div className="scroll">
         <header className="screen-head">
-          <p className="eyebrow">No server</p>
+          <p className="eyebrow">Join</p>
           <h1>Scan the other device’s code</h1>
           <p className="lead">The one who started shows a QR code. Point this camera at it — or paste the code.</p>
         </header>

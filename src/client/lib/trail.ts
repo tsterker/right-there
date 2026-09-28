@@ -9,7 +9,7 @@ export function useTrail(target: Target | null, keepMs = 2500): Vec[] {
   useEffect(() => {
     if (!target) return;
     const t = performance.now();
-    const fresh = target.source === 'anchor' || target.source === 'plan' || (target.active && !wasActive.current);
+    const fresh = target.source === 'anchor' || (target.active && !wasActive.current);
     wasActive.current = target.active;
     setTrail((tr) => (fresh ? [{ p: target.pos, t }] : [...tr.filter((q) => t - q.t < keepMs), { p: target.pos, t }].slice(-90)));
   }, [target, keepMs]);

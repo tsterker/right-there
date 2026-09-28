@@ -1,5 +1,5 @@
 /**
- * WebRTC plumbing for no-server mode: one data channel between two devices,
+ * WebRTC plumbing: one data channel between two devices,
  * set up by exchanging two compact codes (QR or copy/paste) instead of going
  * through a signaling server.
  *

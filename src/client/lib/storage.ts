@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react';
-import type { Role } from '../../shared/session';
 
 export function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -10,16 +9,6 @@ export function loadJSON<T>(key: string, fallback: T): T {
   }
 }
 
-export function loadList<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key);
-    const v = raw ? JSON.parse(raw) : [];
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-
 export function saveJSON(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
@@ -27,21 +16,6 @@ export function saveJSON(key: string, value: unknown) {
     // storage full or disabled: the app still works for this session
   }
 }
-
-const tokenKey = (code: string, role: Role) => `mb.tok.${code}.${role}`;
-export const saveToken = (code: string, role: Role, token: string) => {
-  saveJSON(tokenKey(code, role), { token, at: Date.now() });
-  saveJSON('mb.last', { code, role, at: Date.now() });
-};
-export const loadToken = (code: string, role: Role): string | null =>
-  loadJSON<{ token: string | null }>(tokenKey(code, role), { token: null }).token;
-
-export interface LastSession {
-  code: string | null;
-  role: Role | null;
-  at: number;
-}
-export const loadLastSession = () => loadJSON<LastSession>('mb.last', { code: null, role: null, at: 0 });
 
 /**
  * A tiny persisted store: localStorage-backed value shared by all components

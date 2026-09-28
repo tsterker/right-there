@@ -1,20 +1,6 @@
 /** Small shared UI pieces. */
 import { useEffect, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
-import { PRESSURE } from '../../shared/techniques';
-
-export function PressureMeter({ level, compact }: { level: number; compact?: boolean }) {
-  return (
-    <div className={`pressure${compact ? ' is-compact' : ''}`} aria-label={`Pressure ${level} of 5`}>
-      <div className="pressure-bars">
-        {PRESSURE.map((p) => (
-          <span key={p.level} className={p.level <= level ? 'on' : ''} style={{ height: `${30 + p.level * 14}%` }} />
-        ))}
-      </div>
-      {!compact && <span className="pressure-label">{PRESSURE[level - 1]?.label}</span>}
-    </div>
-  );
-}
 
 export function QR({ text, size = 180, ecc = 'M' }: { text: string; size?: number; ecc?: 'L' | 'M' }) {
   const [svg, setSvg] = useState('');
@@ -88,6 +74,15 @@ export function Toast({ id, children }: { id: string | number | null; children: 
   return (
     <div className="toast" key={id}>
       {children}
+    </div>
+  );
+}
+
+export function Loading({ text }: { text: string }) {
+  return (
+    <div className="screen center-screen">
+      <div className="spinner" aria-hidden />
+      <p>{text}</p>
     </div>
   );
 }

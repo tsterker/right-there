@@ -1,7 +1,7 @@
 /**
- * No-server mode, hosting side. This device runs the session's Room (the
- * same code the relay server runs) and serves two seats: its own screen via
- * an in-page link, and the partner's device via the WebRTC data channel.
+ * Hosting side. This device runs the session's Room and serves two seats:
+ * its own screen via an in-page link, and the partner's device via the
+ * WebRTC data channel.
  */
 import type { ClientMsg, ServerMsg } from '../../shared/protocol';
 import { Room } from '../../shared/room';
@@ -43,7 +43,6 @@ export class PeerHost {
   /** In-page link for this device's own screens. */
   localLink(): Link {
     return {
-      autoRetry: false,
       connect: (h: LinkHandlers) => {
         // Asynchronous delivery, like a real connection: avoids re-entrancy in React handlers.
         this.toLocal = (msg) => queueMicrotask(() => h.message(msg));
@@ -146,7 +145,6 @@ export class PeerHost {
 
 /** Partner side: the session over a data channel that can be replaced after re-pairing. */
 export class ChannelLink implements Link {
-  readonly autoRetry = false;
   private channel: RTCDataChannel | null = null;
   private dispose: (() => void) | null = null;
   private handlers: LinkHandlers | null = null;
@@ -172,7 +170,7 @@ export class ChannelLink implements Link {
     channel.onclose = () => {
       if (this.channel !== channel) return;
       this.channel = null;
-      this.handlers?.closed(false);
+      this.handlers?.closed();
     };
     if (channel.readyState === 'open') this.announce();
     else channel.onopen = () => this.announce();

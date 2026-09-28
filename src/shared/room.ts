@@ -2,9 +2,8 @@
  * The authoritative copy of one session. It validates every action, applies
  * the reducer, numbers the result and produces the messages to send.
  *
- * Runs in the server relay and — in no-server mode — in the browser of the
- * device that hosts the session. Transport-agnostic: callers decide who
- * receives which message.
+ * Runs in the browser of the device that hosts the session.
+ * Transport-agnostic: callers decide who receives which message.
  */
 import type { ServerMsg } from './protocol.ts';
 import { initialState, reduce, sanitizeAction, type Action, type Role, type SessionState } from './session.ts';
@@ -19,7 +18,6 @@ export type RoomResult =
 export class Room {
   state: SessionState;
   seq = 0;
-  lastActivity: number;
   /** Ids of recently applied actions per seat, to drop duplicates resent after a reconnect. */
   private recent: Record<Role, string[]> = { A: [], B: [] };
 
@@ -28,7 +26,6 @@ export class Room {
     private readonly now: () => number,
   ) {
     this.state = initialState(code, now());
-    this.lastActivity = now();
   }
 
   /** Apply an already valid action and return the message that tells everyone. */
@@ -36,7 +33,6 @@ export class Room {
     const at = this.now();
     this.state = reduce(this.state, action, { from, at });
     this.seq += 1;
-    this.lastActivity = at;
     return { t: 'act', a: action, from, at, seq: this.seq, ...(id ? { id } : {}) };
   }
 

@@ -1,41 +1,25 @@
 /**
- * Receiver setup, lying down with the phone next to them:
- * two swipes teach the app how the phone lies, then a practice round.
+ * Receiver setup, lying down with the phone next to them: two swipes teach
+ * the app how the phone lies (orientation) and how far to move per swipe.
  */
-import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_ORIENTATION, describeOrientation, orientationFromSwipes } from '../../../shared/calibration';
+import { useRef, useState } from 'react';
+import { describeOrientation, orientationFromSwipes, type Orientation } from '../../../shared/calibration';
 import { sub } from '../../../shared/geometry';
 import { sensitivityFromSwipes, type Sample } from '../../../shared/nudge';
-import type { SetupStep } from '../../../shared/session';
 import { StatusBar } from '../../components/StatusBar';
-import { TouchPad } from '../../components/TouchPad';
-import { Segmented } from '../../components/ui';
-import { useSession } from '../../lib/connection';
 import { haptic } from '../../lib/haptics';
-import { useCorrection, useProfile } from '../../lib/profile';
-import { useReceiverSettings } from '../../lib/settings';
-import { MODE_OPTIONS } from './modes';
+import { useProfile } from '../../lib/profile';
 
-type Step = Exclude<SetupStep, 'done'>;
+type Step = 'intro' | 'swipe-down' | 'swipe-right';
 
-
-export function ReceiverSetup() {
-  const { state, dispatch } = useSession();
+export function ReceiverSetup({ onDone }: { onDone: (o: Orientation) => void }) {
   const [profile, setProfile] = useProfile();
-  const [settings] = useReceiverSettings();
-  const model = useCorrection(profile.points);
-  const [step, setStep] = useState<Step>(state.setupStep === 'practice' && profile.orientation ? 'practice' : 'intro');
+  const [step, setStep] = useState<Step>('intro');
   const [down, setDown] = useState<Sample[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    dispatch({ type: 'setup.step', step });
-  }, [dispatch, step]);
-
   const onSwipe = (samples: Sample[]) => {
-    const first = samples[0];
-    const last = samples[samples.length - 1];
-    const delta = sub(last, first);
+    const delta = sub(samples[samples.length - 1], samples[0]);
     if (Math.hypot(delta.x, delta.y) < 60) {
       setMessage('A little longer, please — like drawing a line across the screen.');
       haptic('tap');
@@ -57,16 +41,12 @@ export function ReceiverSetup() {
       haptic('alert');
       return;
     }
-    const sensitivity = sensitivityFromSwipes(down, samples);
-    setProfile((p) => ({ ...p, orientation: r.orientation, sensitivity, setupAt: Date.now() }));
-    setMessage(null);
-    setStep('practice');
+    setProfile((p) => ({ ...p, orientation: r.orientation, sensitivity: sensitivityFromSwipes(down, samples) }));
     haptic('confirm');
+    onDone(r.orientation);
   };
 
-  const start = () => dispatch({ type: 'phase', phase: 'live' });
-
-  if (step === 'swipe-down' || step === 'swipe-right') {
+  if (step !== 'intro') {
     return (
       <div className="screen setup-swipe">
         <SwipeArea onSwipe={onSwipe}>
@@ -92,98 +72,26 @@ export function ReceiverSetup() {
     );
   }
 
-  if (step === 'practice') {
-    const o = profile.orientation ?? DEFAULT_ORIENTATION;
-    return (
-      <div className="screen setup-practice">
-        <StatusBar compact>
-          <Segmented value={profile.mode} options={MODE_OPTIONS} onChange={(mode) => setProfile({ mode })} className="small" />
-        </StatusBar>
-        <div className="practice-head">
-          <p className="eyebrow">Step 2 of 3 · Try it</p>
-          <h2>Got it — the {describeOrientation(o)}.</h2>
-          <p className="lead">
-            {profile.mode === 'nudge'
-              ? 'Drag anywhere to move the spot. Slow = precise, quick = far. Your partner sees it live.'
-              : 'Touch the spot on the picture. Your partner sees it live.'}
-          </p>
-        </div>
-        <TouchPad
-          mode={profile.mode}
-          orientation={o}
-          sensitivity={profile.sensitivity}
-          tune={profile.tune}
-          autoTune={false}
-          model={model}
-          target={state.target}
-          markers={state.markers}
-          dispatch={dispatch}
-          dim={settings.dim}
-        />
-        <footer className="screen-foot row">
-          <button className="btn ghost" onClick={() => setStep('swipe-down')}>
-            Redo swipes
-          </button>
-          <button className="btn primary grow" onClick={start}>
-            Start massage ▶
-          </button>
-        </footer>
-      </div>
-    );
-  }
-
   return (
     <div className="screen setup-intro">
       <StatusBar />
-      <div className="scroll">
-        <header className="screen-head">
-          <p className="eyebrow">Step 2 of 3 · Set up pointing</p>
-          <h1>Lie down and get comfy</h1>
-          <p className="lead">
-            Put your phone flat next to you, where your hand rests naturally. Two quick swipes tell the app how the phone is
-            lying — then you just move a finger and your partner sees where you want it.
-          </p>
-        </header>
-
-        <section className="field">
-          <h3>How do you want to point?</h3>
-          <div className="mode-cards">
-            <button className={`mode-card${profile.mode === 'nudge' ? ' is-on' : ''}`} onClick={() => setProfile({ mode: 'nudge' })}>
-              <strong>✋ Nudge</strong>
-              <span>Eyes-free. Drag anywhere and the spot moves like a trackpad cursor: “a bit more left”.</span>
-            </button>
-            <button className={`mode-card${profile.mode === 'map' ? ' is-on' : ''}`} onClick={() => setProfile({ mode: 'map' })}>
-              <strong>🗺 Map</strong>
-              <span>Look and touch the spot on a picture of your back. Gets more precise with calibration.</span>
-            </button>
-          </div>
-        </section>
-
-        <section className="field tips">
-          <h3>While lying down</h3>
-          <ul>
-            <li>
-              <b>Double-tap</b> anywhere = “that's the spot” ♥
-            </li>
-            <li>
-              <b>Two-finger swipe</b> up / down = firmer / softer
-            </li>
-            <li>Buttons at the bottom edge: Ouch · Softer · ♥ · Firmer</li>
-          </ul>
-        </section>
+      <div className="scroll center-col">
+        <p className="eyebrow">Setup</p>
+        <h1>Lie down, phone next to you</h1>
+        <p className="lead">
+          Put it flat where your hand rests. Two quick swipes tell the app how it lies — then move a finger and your partner
+          sees where you want the hands.
+        </p>
       </div>
       <footer className="screen-foot column">
         <button className="btn primary block" onClick={() => setStep('swipe-down')}>
           Start the two swipes
         </button>
         {profile.orientation && (
-          <button className="btn ghost block" onClick={() => setStep('practice')}>
-            Phone lies like last time ({describeOrientation(profile.orientation).replace('top of the phone points toward ', 'top → ')})
+          <button className="btn ghost block" onClick={() => onDone(profile.orientation!)}>
+            Same as last time ({describeOrientation(profile.orientation).replace('top of the phone points toward ', 'top → ')})
           </button>
         )}
-        <button className="btn link" onClick={start}>
-          Skip — start massage
-        </button>
       </footer>
     </div>
   );

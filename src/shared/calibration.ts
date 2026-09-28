@@ -15,7 +15,6 @@ import {
   MIRROR_X,
   apply,
   det,
-  dist,
   len,
   mul,
   normalize,
@@ -113,15 +112,13 @@ export function describeOrientation(o: Orientation, who: 'you' | 'they' = 'you')
 // ---------------------------------------------------------------------------
 // Map-mode correction
 
-export type CalibSource = 'landmark' | 'touch' | 'confirmed';
-
+/** One "right there" in map mode, paired with where the giver's hands really were. */
 export interface CalibPoint {
   /** Where the receiver pointed on their map (body cm, orientation already applied). */
   raw: Vec;
-  /** Where the touch really was (body cm). */
+  /** Where the hands were (body cm). */
   truth: Vec;
   at: number;
-  source: CalibSource;
 }
 
 export interface CorrectionModel {
@@ -139,8 +136,6 @@ const KERNEL_SIGMA = 7;
 const KERNEL_PRIOR = 3;
 const RECENCY_HALF_LIFE = 12;
 
-const SOURCE_WEIGHT: Record<CalibSource, number> = { landmark: 1, touch: 1, confirmed: 0.5 };
-
 export const IDENTITY_MODEL: CorrectionModel = {
   n: 0,
   center: { x: 0, y: 25 },
@@ -153,7 +148,7 @@ function weights(points: CalibPoint[]): number[] {
   const order = points.map((p, i) => ({ i, at: p.at })).sort((a, b) => b.at - a.at);
   const w = new Array<number>(points.length).fill(0);
   order.forEach(({ i }, rank) => {
-    w[i] = SOURCE_WEIGHT[points[i].source] * 0.5 ** (rank / RECENCY_HALF_LIFE);
+    w[i] = 0.5 ** (rank / RECENCY_HALF_LIFE);
   });
   return w;
 }
@@ -257,39 +252,4 @@ export function correct(model: CorrectionModel, p: Vec): Vec {
   }
   const denom = KERNEL_PRIOR + ks;
   return clampToBody({ x: f.x + kx / denom, y: f.y + ky / denom });
-}
-
-export interface CalibQuality {
-  n: number;
-  /** Mean distance between where they pointed and the real touch, before correction. */
-  rawErrorCm: number | null;
-  /** Leave-one-out error after correction (needs ≥ 3 points). */
-  errorCm: number | null;
-}
-
-export function evaluateCorrection(points: CalibPoint[]): CalibQuality {
-  const pts = points.slice(-MAX_CALIB_POINTS);
-  if (pts.length === 0) return { n: 0, rawErrorCm: null, errorCm: null };
-  const rawErrorCm = pts.reduce((s, p) => s + dist(p.raw, p.truth), 0) / pts.length;
-  if (pts.length < 3) return { n: pts.length, rawErrorCm, errorCm: null };
-  const errs = pts.map((p, i) => {
-    const model = fitCorrection(pts.filter((_, j) => j !== i));
-    return dist(correct(model, p.raw), p.truth);
-  });
-  errs.sort((a, b) => a - b);
-  const mid = errs.length / 2;
-  const errorCm = errs.length % 2 ? errs[Math.floor(mid)] : (errs[mid - 1] + errs[mid]) / 2;
-  return { n: pts.length, rawErrorCm, errorCm };
-}
-
-/** Rough coverage check: which big areas still lack calibration points. */
-export function coverageGaps(points: CalibPoint[]): ('upper-left' | 'upper-right' | 'lower-left' | 'lower-right')[] {
-  const has = (fx: (x: number) => boolean, fy: (y: number) => boolean) =>
-    points.some((p) => fx(p.truth.x) && fy(p.truth.y));
-  const gaps: ('upper-left' | 'upper-right' | 'lower-left' | 'lower-right')[] = [];
-  if (!has((x) => x < -2, (y) => y < 25)) gaps.push('upper-left');
-  if (!has((x) => x > 2, (y) => y < 25)) gaps.push('upper-right');
-  if (!has((x) => x < -2, (y) => y >= 25)) gaps.push('lower-left');
-  if (!has((x) => x > 2, (y) => y >= 25)) gaps.push('lower-right');
-  return gaps;
 }

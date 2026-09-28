@@ -1,26 +1,27 @@
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
-import type { AddressInfo } from 'node:net';
-import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } from 'vite';
-import { lanAddresses } from './server/lan.ts';
-import { createRelay } from './server/relay.ts';
+import { networkInterfaces } from 'node:os';
+import { defineConfig, type Plugin } from 'vite';
 
-/** Runs the session relay inside the Vite dev/preview server (same port, path /ws). */
-function relayPlugin(): Plugin {
-  const setup = (server: ViteDevServer | PreviewServer) => {
-    const port = () => (server.httpServer?.address() as AddressInfo | null)?.port ?? null;
-    const relay = createRelay({ info: () => ({ lan: lanAddresses(), httpPort: port(), httpsPort: null }) });
-    server.httpServer?.on('upgrade', (req, socket, head) => {
-      relay.handleUpgrade(req, socket, head);
-    });
-    server.middlewares.use((req, res, next) => {
-      relay.handleHttp(req, res).then((handled) => {
-        if (!handled) next();
-      }, next);
-    });
-    server.httpServer?.on('close', () => relay.close());
-  };
-  return { name: 'right-there-relay', configureServer: setup, configurePreviewServer: setup };
+const PORT = 5173;
+
+/**
+ * Where a phone reaches the dev server, for the QR codes shown on this
+ * computer: the tunnel of `npm run dev:phone`, else this computer's address
+ * on the Wi-Fi.
+ */
+function devAppUrl(): string {
+  if (process.env.DEV_APP_URL) return process.env.DEV_APP_URL;
+  const found: { ip: string; score: number }[] = [];
+  for (const [name, addrs] of Object.entries(networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family !== 'IPv4' || a.internal || a.address.startsWith('169.254.')) continue;
+      const lan = /^(192\.168|10)\.|^172\.(1[6-9]|2\d|3[01])\./.test(a.address);
+      found.push({ ip: a.address, score: (lan ? 0 : 10) + (/^(en|eth|wl)/.test(name) ? 0 : 5) });
+    }
+  }
+  found.sort((a, b) => a.score - b.score);
+  return found.length ? `http://${found[0].ip}:${PORT}/` : '';
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,23 +58,17 @@ function singleFile(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) =>
-  mode === 'single'
-    ? {
-        plugins: [react(), singleFile()],
-        base: './',
-        publicDir: false,
-        build: {
-          outDir: 'dist-single',
-          emptyOutDir: true,
-          assetsInlineLimit: 100_000_000,
-          cssCodeSplit: false,
-          modulePreload: false,
-        },
-      }
-    : {
-        plugins: [react(), relayPlugin()],
-        server: { port: 5173, host: true },
-        preview: { port: 4173, host: true },
-      },
-);
+export default defineConfig(({ command }) => ({
+  plugins: [react(), singleFile()],
+  base: './',
+  define: { __DEV_APP_URL__: JSON.stringify(command === 'serve' ? devAppUrl() : '') },
+  publicDir: command === 'build' ? false : 'public',
+  server: { port: PORT, strictPort: true, host: true, allowedHosts: ['.trycloudflare.com'] },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    assetsInlineLimit: 100_000_000,
+    cssCodeSplit: false,
+    modulePreload: false,
+  },
+}));

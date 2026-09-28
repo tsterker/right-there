@@ -6,6 +6,10 @@ The **receiver** lies face down with their phone beside them and moves a finger 
 
 **Open https://tsterker.github.io/right-there/ on both devices.** Prototype. There's no server: the two devices talk to each other directly over the Wi-Fi.
 
+| Pair | Receiver | Giver |
+| :-: | :-: | :-: |
+| <img src="docs/pair.png" width="240" alt="Pairing: the giver's phone shows a QR code"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, the nudge direction and the area name"> |
+
 ## How it works
 
 1. **Pair.** Pick a role on one device, then scan its QR code with the other device's camera. The link opens Right There, which shows a reply code. Hold that up to the first device and tap *Scan their code*, or copy and paste it.
@@ -27,15 +31,16 @@ The **receiver** lies face down with their phone beside them and moves a finger 
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173 with hot reload
+npm run dev          # http://localhost:4747 with hot reload
 npm run dev:phone    # the same, plus a temporary HTTPS link for the phone
 ```
 
-- **Testing with a phone.** Open `http://localhost:5173` on the computer. Its QR codes point the phone at the dev server, and edits reload on both screens.
+- **Testing with a phone.** Open `http://localhost:4747` on the computer. Its QR codes point the phone at the dev server, and edits reload on both screens.
   - **`npm run dev`:** the phone uses this computer's Wi-Fi address over plain HTTP.
   - **`npm run dev:phone`:** the phone gets HTTPS through a Cloudflare quick tunnel (no account needed). Its camera and screen-on then work too.
-- **Both screens in one window:** `http://localhost:5173/#/demo` pairs them automatically. Drag on the receiver with the mouse; double-click = right there.
+- **Both screens in one window:** `http://localhost:4747/#/demo` pairs them automatically. Drag on the receiver with the mouse; double-click = right there.
 - **Checks:** `npm test` · `npm run typecheck` · `npm run e2e`. The e2e run builds the app, then drives Chrome and WebKit through a whole session. It needs Google Chrome, plus `npx playwright-core install webkit` once.
+- **README screenshots:** `npm run screenshots` refreshes `docs/*.png`.
 - **Build and publish:** `npm run build` writes one self-contained file, `dist/index.html` (also copied to `dist/right-there.html`), which works on any static host or opened from disk. Every push to `main` publishes it to GitHub Pages.
 - **Forks** publish to their own `https://<you>.github.io/<repo>/`. For local builds, put that address in `.env.production`; QR codes shown by a copy opened from disk use it.
 

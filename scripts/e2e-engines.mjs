@@ -8,6 +8,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices, webkit } from 'playwright-core';
+import { mouseDrag, pair, setupSwipes } from './drive.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name, fallback) => {
@@ -15,18 +16,10 @@ const arg = (name, fallback) => {
   return k > 0 ? process.argv[k + 1] : fallback;
 };
 const FILE = arg('url', pathToFileURL(join(root, 'dist', 'right-there.html')).href);
-const code = async (p) => (await p.locator('.pair-qr[data-code]').first().getAttribute('data-code')) ?? '';
 const engines = {
   chrome: () => chromium.launch({ channel: 'chrome', headless: true }),
   webkit: () => webkit.launch({ headless: true }),
 };
-
-async function drag(page, from, to) {
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(to.x, to.y, { steps: 16 });
-  await page.mouse.up();
-}
 
 let failed = 0;
 async function run(hostEngine, guestEngine) {
@@ -39,28 +32,17 @@ async function run(hostEngine, guestEngine) {
     for (const [n, p] of [['host', host], ['guest', guest]]) p.on('pageerror', (e) => errors.push(`${n}: ${e.message}`));
     await host.goto(FILE);
     await host.getByRole('button', { name: /giving the massage/i }).click();
-    await host.waitForSelector('.pair-qr[data-code]');
-    await guest.goto(`${FILE}#/p2p/join/${await code(host)}`);
-    await guest.waitForSelector('.pair-qr[data-code]');
-    await host.fill('.paste-row input', await code(guest));
+    await pair(host, guest, FILE);
     const t0 = Date.now();
-    await host.getByRole('button', { name: 'Connect' }).click();
     await guest.waitForSelector('.setup-intro', { timeout: 20000 });
     await host.waitForSelector('.giver-live', { timeout: 20000 });
     const ms = Date.now() - t0;
     await host.getByRole('radio', { name: /At their feet/ }).click();
 
-    await guest.getByRole('button', { name: 'Start the two swipes' }).click();
-    const box = await guest.locator('.swipe-area').boundingBox();
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    await drag(guest, { x: cx, y: box.y + box.height * 0.3 }, { x: cx, y: box.y + box.height * 0.75 });
-    await guest.getByText('Swipe 2 of 2').waitFor({ timeout: 5000 });
-    await drag(guest, { x: box.x + box.width * 0.15, y: cy }, { x: box.x + box.width * 0.85, y: cy });
-    await guest.waitForSelector('.receiver-pad', { timeout: 5000 });
+    await setupSwipes(guest, mouseDrag);
 
     const pad = await guest.locator('.touchpad').boundingBox();
-    await drag(guest, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 }, { x: pad.x + pad.width * 0.7, y: pad.y + pad.height * 0.35 });
+    await mouseDrag(guest, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 }, { x: pad.x + pad.width * 0.7, y: pad.y + pad.height * 0.35 });
     await host.waitForSelector('.nudge-chip', { timeout: 5000 });
     await guest.getByRole('button', { name: /Right there/ }).click();
     await host.waitForSelector('.banner-good', { timeout: 5000 });

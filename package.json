@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "e2e": "npm run build && node scripts/e2e.mjs && node scripts/e2e-engines.mjs"
+    "e2e": "npm run build && node scripts/e2e.mjs && node scripts/e2e-engines.mjs",
+    "screenshots": "npm run build && node scripts/screenshots.mjs"
   },
   "engines": {
     "node": ">=22.12"

@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices } from 'playwright-core';
 import { createServer } from 'vite';
+import { codeOf, mouseDrag, onMap, pair, setupSwipes, sleep, touchDrag, touchTaps } from './drive.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name, fallback) => {
@@ -41,7 +42,6 @@ const check = (cond, msg) => {
   console.log(`  ${cond ? '✓' : '✗'} ${msg}`);
   if (!cond) problems.push(msg);
 };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let shots = 0;
 const shot = async (page, name) => {
   shots += 1;
@@ -56,56 +56,6 @@ const watch = (name, page) => {
 };
 const laptop = async (name) => watch(name, await (await browser.newContext({ viewport: { width: 1280, height: 820 } })).newPage());
 const phone = async (name) => watch(name, await (await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 2 })).newPage());
-const codeOf = async (page, scope = '') => (await page.locator(`${scope} .pair-qr[data-code]`.trim()).first().getAttribute('data-code')) ?? '';
-
-// Input: real touch events (CDP) for the phone, the mouse for the laptop.
-async function touchDrag(page, from, to, ms = 600, steps = 16) {
-  const s = await page.context().newCDPSession(page);
-  const at = (k) => [{ x: from.x + ((to.x - from.x) * k) / steps, y: from.y + ((to.y - from.y) * k) / steps }];
-  await s.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0) });
-  for (let k = 1; k <= steps; k++) {
-    await sleep(ms / steps);
-    await s.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(k) });
-  }
-  await s.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-}
-async function touchTaps(page, p, count = 1) {
-  const s = await page.context().newCDPSession(page);
-  for (let i = 0; i < count; i++) {
-    await s.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [p] });
-    await s.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await sleep(90);
-  }
-}
-async function mouseDrag(page, from, to, steps = 16) {
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(to.x, to.y, { steps });
-  await page.mouse.up();
-}
-/** Screen position of a body point (cm) on the map inside `scope`. */
-const onMap = (page, scope, x, y) =>
-  page.evaluate(
-    ([scope, x, y]) => {
-      const g = document.querySelector(`${scope} svg.map g[transform^="matrix"]`);
-      const pt = new DOMPoint(x, y).matrixTransform(g.getScreenCTM());
-      return { x: pt.x, y: pt.y };
-    },
-    [scope, x, y],
-  );
-
-/** The receiver's two setup swipes: neck → lower back, then left → right (phone upright). */
-async function setupSwipes(page, drag) {
-  await page.getByRole('button', { name: 'Start the two swipes' }).click();
-  const box = await page.locator('.swipe-area').boundingBox();
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await drag(page, { x: cx, y: box.y + box.height * 0.3 }, { x: cx, y: box.y + box.height * 0.75 });
-  await page.getByText('Swipe 2 of 2').waitFor();
-  await drag(page, { x: box.x + box.width * 0.15, y: cy }, { x: box.x + box.width * 0.85, y: cy });
-  await page.waitForSelector('.receiver-pad');
-}
-
 /** The dev server on its usual port, or null if something (e.g. `npm run dev`) already has it. */
 async function startDevServer() {
   const server = await createServer({ root, logLevel: 'silent' });
@@ -117,19 +67,6 @@ async function startDevServer() {
     if (/already in use/.test(err.message)) return null;
     throw err;
   }
-}
-
-/** Host starts, guest opens the link from the QR code, host pastes the reply. */
-async function pair(host, guest, hostButton, scope = '') {
-  if (hostButton) await host.getByRole('button', { name: hostButton }).click();
-  await host.waitForSelector(`${scope} .pair-qr[data-code]`.trim());
-  const offer = await codeOf(host, scope);
-  await guest.goto(`${GUEST}#/p2p/join/${offer}`);
-  await guest.waitForSelector('.pair-qr[data-code]');
-  const reply = await codeOf(guest);
-  await host.fill(`${scope} .paste-row input`.trim(), reply);
-  await host.locator(scope || 'body').getByRole('button', { name: 'Connect' }).click();
-  return { offer, reply };
 }
 
 let dev = null;
@@ -145,7 +82,7 @@ try {
   check(/^https:\/\/.+#\/p2p\/join\/[\w-]+$/.test(qrLink), `the QR code opens the app on the phone (${qrLink.split('#')[0]})`);
   await shot(mac, 'mac-pairing');
   const iphone = await phone('phone');
-  const { offer, reply } = await pair(mac, iphone, null);
+  const { offer, reply } = await pair(mac, iphone, GUEST);
   check(offer.length < 320 && reply.length < 320, `codes are compact (${offer.length} / ${reply.length} chars)`);
   await iphone.waitForSelector('.setup-intro', { timeout: 20000 });
   await mac.waitForSelector('.giver-live .first-view', { timeout: 20000 });
@@ -203,7 +140,7 @@ try {
   const macPad = await mac.locator('.touchpad').boundingBox();
   await mouseDrag(mac, { x: macPad.x + macPad.width / 2, y: macPad.y + macPad.height / 2 }, { x: macPad.x + macPad.width / 2 + 120, y: macPad.y + macPad.height / 2 + 160 });
   await mac.getByRole('button', { name: 'Reconnect' }).click();
-  await pair(mac, iphone, null, '.sheet');
+  await pair(mac, iphone, GUEST, '.sheet');
   await iphone.waitForSelector('.giver-live', { timeout: 20000 });
   await sleep(300);
   const after = await iphone.locator('.region-name').innerText();

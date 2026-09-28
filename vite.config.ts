@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { defineConfig, type Plugin } from 'vite';
 
-const PORT = 5173;
+/**
+ * Its own port, apart from Vite's default 5173 that other projects use too (they
+ * would share this app's saved settings). Strict: QR codes shown on this
+ * computer contain the port, so a silently moved server would send phones elsewhere.
+ */
+const PORT = 4747;
 
 /**
  * Where a phone reaches the dev server, for the QR codes shown on this

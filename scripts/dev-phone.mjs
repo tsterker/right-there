@@ -5,14 +5,14 @@
  * the screen on work there too — with hot reload on both screens. The session
  * itself still runs directly between the two devices (same Wi-Fi).
  *
- *   npm run dev:phone      then open http://localhost:5173 on this computer
+ *   npm run dev:phone      then open the printed http://localhost:… on this computer
  */
 import { Resolver } from 'node:dns/promises';
 import { Tunnel } from 'cloudflared';
 import QRCode from 'qrcode';
-import { createServer } from 'vite';
+import { createServer, resolveConfig } from 'vite';
 
-const PORT = 5173;
+const PORT = (await resolveConfig({}, 'serve')).server.port;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 console.log('\n  Opening a temporary public link…');
@@ -28,7 +28,7 @@ const url = await new Promise((resolve, reject) => {
 
 // vite.config.ts puts this into the QR codes shown on this computer.
 process.env.DEV_APP_URL = `${url}/`;
-const server = await createServer({ server: { port: PORT } });
+const server = await createServer();
 await server.listen();
 
 const stop = async (code = 0) => {

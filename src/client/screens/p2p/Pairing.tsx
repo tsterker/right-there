@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { ROLE_NAME, otherRole, type Role } from '../../../shared/session';
-import { cameraAvailable, QrScanner } from '../../components/QrScanner';
+import { cameraAvailable, noCameraReason, QrScanner } from '../../components/QrScanner';
 import { QR } from '../../components/ui';
 import { useLatest } from '../../lib/connection';
 import { navigate } from '../../lib/router';
@@ -28,6 +28,14 @@ function CopyButton({ text, label = 'Copy code' }: { text: string; label?: strin
   return (
     <button className="btn ghost small" onClick={async () => setDone(await copy(text))}>
       {done ? 'Copied ✓' : label}
+    </button>
+  );
+}
+
+function ShareButton({ text }: { text: string }) {
+  return (
+    <button className="btn small" onClick={() => void navigator.share({ text }).catch(() => {})}>
+      Share code
     </button>
   );
 }
@@ -82,6 +90,7 @@ function ReadCode({ onCode, scanHint }: { onCode: (text: string) => void; scanHi
           <button className="btn ghost small" onClick={() => setScanning(false)}>
             Stop camera
           </button>
+          <PasteCode onCode={onCode} busy={false} placeholder="…or paste the code here" />
         </>
       ) : (
         <>
@@ -90,6 +99,7 @@ function ReadCode({ onCode, scanHint }: { onCode: (text: string) => void; scanHi
               📷 Scan the code
             </button>
           )}
+          {!cameraAvailable() && noCameraReason() && <p className="hint">{noCameraReason()}</p>}
           <PasteCode onCode={onCode} busy={false} placeholder="…or paste the code here" />
         </>
       )}
@@ -209,12 +219,11 @@ export function HostPairing({
         </div>
         <section className="pair-card">
           <h2>
-            <span className="step-num">2</span> Then hold {device} up to this camera
+            <span className="step-num">2</span> Then scan the code on {device}
           </h2>
           {cameraAvailable() && offer && !busy && (
             <QrScanner
               key={scan}
-              facing="user"
               hint="Their code goes here"
               onResult={(t) => {
                 if (kindOf(t) !== 'answer') return false;
@@ -223,8 +232,9 @@ export function HostPairing({
             />
           )}
           {busy && <p className="waiting">Connecting…</p>}
+          {!cameraAvailable() && noCameraReason() && <p className="hint">{noCameraReason()}</p>}
           <details className="pair-paste" open={!cameraAvailable()}>
-            <summary>No camera? Paste their code</summary>
+            <summary>Camera not working? Paste their code</summary>
             <PasteCode onCode={accept} busy={busy || !offer} />
           </details>
         </section>
@@ -309,9 +319,12 @@ export function GuestPairing({
             <span className="pulse" /> Waiting for their screen to read it…
           </p>
           <details className="pair-options">
-            <summary>Their device has no camera?</summary>
-            <p className="hint">Copy the code and paste it there (on Apple devices the clipboard syncs).</p>
-            <CopyButton text={answer.code} />
+            <summary>Their camera isn’t working?</summary>
+            <p className="hint">Send them this code (Messages, AirDrop, WhatsApp…) and paste it there. Between Apple devices, copy and paste also works.</p>
+            <div className="row">
+              {'share' in navigator && <ShareButton text={answer.code} />}
+              <CopyButton text={answer.code} />
+            </div>
           </details>
           {!compact && (
             <button className="btn link" onClick={() => navigate('/p2p/scan', true)}>

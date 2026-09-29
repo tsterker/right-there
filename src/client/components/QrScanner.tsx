@@ -1,14 +1,38 @@
-/** Camera QR scanner (rear camera on phones, webcam on laptops). */
+/** Camera QR scanner (rear camera on phones, switchable; webcam on laptops). */
 import jsQR from 'jsqr';
 import { useEffect, useRef, useState } from 'react';
 import { useLatest } from '../lib/connection';
 
 export const cameraAvailable = () => typeof navigator.mediaDevices?.getUserMedia === 'function';
 
+/** Why the camera didn't open, and what to do about it. */
+function cameraError(e: Error): string {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  switch (e.name) {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return ios
+        ? 'Camera access is blocked for this site. In Safari: tap aA in the address bar → Website Settings → Camera → Allow (or Settings → Safari → Camera). Or paste the code instead.'
+        : 'Camera access is blocked for this site. Tap the icon left of the address → Permissions → Camera → Allow. Or paste the code instead.';
+    case 'NotReadableError':
+    case 'AbortError':
+      return 'The camera is busy. Close other apps or tabs using it, then try again.';
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'No camera found here — paste the code instead.';
+    default:
+      return 'The camera didn’t open. If this page is open inside another app, open it in Safari or Chrome. Or paste the code instead.';
+  }
+}
+
+/** Why there's no camera button at all, if we can tell. */
+export const noCameraReason = () =>
+  window.isSecureContext ? null : 'The camera only works on the https:// link of this page — paste the code, or open that link.';
+
 /**
  * `onResult` returns false to ignore a code and keep scanning. `facing`: the
- * back camera to scan something in front of you, the front one to have
- * something held up to this screen.
+ * camera to start with; the back one, since that's what points at another
+ * screen (a laptop's only webcam is picked either way).
  */
 export function QrScanner({
   onResult,
@@ -23,6 +47,8 @@ export function QrScanner({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [mirrored, setMirrored] = useState(false);
+  const [face, setFace] = useState(facing);
+  const [cameras, setCameras] = useState(1);
   const result = useLatest(onResult);
 
   useEffect(() => {
@@ -55,7 +81,7 @@ export function QrScanner({
     };
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .getUserMedia({ video: { facingMode: face, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
       .then((s) => {
         if (stopped) {
           s.getTracks().forEach((track) => track.stop());
@@ -70,14 +96,15 @@ export function QrScanner({
           void v.play().catch(() => {});
         }
         raf = requestAnimationFrame(tick);
+        // Labels and counts are only reliable once access was granted.
+        navigator.mediaDevices
+          .enumerateDevices()
+          .then((ds) => !stopped && setCameras(ds.filter((d) => d.kind === 'videoinput').length))
+          .catch(() => {});
       })
       .catch((e: Error) => {
         if (stopped) return;
-        setError(
-          e.name === 'NotAllowedError'
-            ? 'Camera access was blocked. Allow it in the browser, or paste the code instead.'
-            : 'No camera available here — paste the code instead.',
-        );
+        setError(`${cameraError(e)} (${e.name})`);
       });
 
     return () => {
@@ -85,7 +112,7 @@ export function QrScanner({
       cancelAnimationFrame(raf);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [result, attempt, facing]);
+  }, [result, attempt, face]);
 
   return (
     <div className="qr-scanner">
@@ -101,6 +128,11 @@ export function QrScanner({
           <video ref={video} playsInline muted autoPlay className={mirrored ? 'is-mirrored' : ''} />
           <div className="qr-scanner-frame" aria-hidden />
           {hint && <p className="qr-scanner-hint">{hint}</p>}
+          {cameras > 1 && (
+            <button className="btn small qr-scanner-switch" onClick={() => setFace((f) => (f === 'user' ? 'environment' : 'user'))}>
+              ⇄ Switch camera
+            </button>
+          )}
         </>
       )}
     </div>

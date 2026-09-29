@@ -12,7 +12,7 @@ The **receiver** lies face down with their phone beside them and moves a finger 
 
 ## How it works
 
-1. **Pair.** The giver taps *Start as the giver*. The receiver scans the QR code with their phone's camera app; the link opens Right There, which shows a reply code. They hold it up to the giver's camera, and the two are connected. No camera? Copy and paste the code.
+1. **Pair.** The giver taps *Start as the giver*. The receiver scans the QR code with their phone's camera app; the link opens Right There, which shows a reply code. They hold it up to the giver's camera, and the two are connected. Scanning in the app uses the back camera (*Switch camera* flips it). Camera not working? The screen says why; *Share code* sends the reply by Messages, AirDrop or WhatsApp, and the paste box finds the code inside the message.
 2. **Two swipes (receiver).** Put the phone flat where your hand rests. Swipe *neck → lower back*, then *left → right*. This tells the app how the phone is lying. Next time you can tap *Same as last time*.
 3. **Guide.**
    - **Receiver:**

@@ -1279,6 +1279,12 @@ label.slider input {
   text-shadow: 0 1px 3px #000;
   margin: 0;
 }
+.qr-scanner-switch {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(20, 25, 34, 0.8);
+}
 .p2p-reconnect {
   justify-content: flex-start;
   align-items: stretch;

@@ -217,6 +217,9 @@ export function extractCode(input: string): string {
   if (m) return m[1];
   const bare = /^[A-Za-z0-9_-]+$/.exec(text);
   if (bare) return text;
+  // Pasted from a message: the longest code-like run of characters.
+  const runs = text.match(/[A-Za-z0-9_-]{40,}/g);
+  if (runs) return runs.reduce((a, b) => (b.length > a.length ? b : a));
   throw new SignalError('That is not a Right There code.');
 }
 

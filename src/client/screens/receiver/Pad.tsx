@@ -72,7 +72,7 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
         dim={settings.dim}
         bothSides={state.bothSides}
         onRightThere={rightThere}
-        onTwoFingerTap={() => setBothSides(!state.bothSides)}
+        onTwoFingerTap={() => setBothSides(state.bothSides == null)}
         onTune={(tune) => setProfile({ tune })}
       >
         <div className="pad-hint">
@@ -111,8 +111,8 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
         )}
         <h4>Massage</h4>
         <label className="toggle">
-          <input type="checkbox" checked={state.bothSides} onChange={(e) => setBothSides(e.target.checked)} />
-          Both sides at once (two-finger tap)
+          <input type="checkbox" checked={state.bothSides != null} onChange={(e) => setBothSides(e.target.checked)} />
+          Both sides at once (two-finger tap) · experimental
         </label>
         <h4>This device</h4>
         <label className="toggle">

@@ -114,7 +114,7 @@ try {
   check((await iphone.locator('.toast').innerText()).includes('toward your head'), 'swipes understood: phone top toward the head');
   check((await mac.locator('.region-name').textContent()) === 'No spot yet', 'Mac waits for the first pointing');
   await touchDrag(iphone, { x: 190, y: 420 }, { x: 250, y: 330 }, 900);
-  await mac.waitForSelector('.map-heading', { timeout: 5000 });
+  await mac.waitForSelector('.map-ping', { timeout: 5000 });
   const region = await mac.locator('.region-name').textContent();
   check(region !== 'No spot yet', `Mac follows the nudge and points its way: "${region}"`);
   await shot(mac, 'mac-live-nudge');
@@ -203,7 +203,7 @@ try {
   const mid = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
   const end = { x: mid.x + 60, y: mid.y - 90 };
   await mouseDrag(desk, mid, end);
-  await gx.locator('.map-heading').waitFor({ timeout: 5000 });
+  await gx.locator('.map-ping').waitFor({ timeout: 5000 });
   await desk.mouse.dblclick(end.x, end.y);
   await gx.locator('.banner-good').waitFor({ timeout: 5000 });
   check(true, 'dragging on the receiver moves the giver’s dot; double-click = right there');

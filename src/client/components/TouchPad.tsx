@@ -14,7 +14,7 @@ import { correct, type CorrectionModel, type Orientation } from '../../shared/ca
 import { add, roundVec, sub, type Vec } from '../../shared/geometry';
 import { Nudger, tuneFromStrokes, type Stroke } from '../../shared/nudge';
 import { classify } from '../../shared/regions';
-import type { Action, InputMode, Target } from '../../shared/session';
+import { keepSide, type Action, type InputMode, type Side, type Target } from '../../shared/session';
 import { useLatest } from '../lib/connection';
 import { haptic } from '../lib/haptics';
 import { DEFAULT_START, lastMapPoint } from '../lib/pointing';
@@ -55,7 +55,8 @@ export interface TouchPadProps {
   dispatch: (a: Action) => void;
   onRightThere?: () => void;
   onTwoFingerTap?: () => void;
-  bothSides?: boolean;
+  /** Working both sides: the side we steer (nudges stop at the spine). */
+  bothSides?: Side | null;
   onTune?: (tune: number, reason: 'overshoot' | 'undershoot') => void;
   dim?: boolean;
   children?: ReactNode;
@@ -225,7 +226,8 @@ export function TouchPad(props: TouchPadProps) {
       if (!g.moved) return;
       const d = nudger.current.move({ x: e.clientX, y: e.clientY, t: e.timeStamp });
       if (d.x === 0 && d.y === 0) return;
-      const next = clampToBody(add(posRef.current, d));
+      const side = p.current.bothSides;
+      const next = side ? keepSide(clampToBody(add(posRef.current, d)), side) : clampToBody(add(posRef.current, d));
       setLocal(next);
       emit(next, true, g.from);
       g.sent = true;
@@ -302,7 +304,7 @@ export function TouchPad(props: TouchPadProps) {
         angle={props.orientation.angle}
         mirrored={props.orientation.mirrored}
         target={{ pos, active }}
-        bothSides={props.bothSides}
+        bothSides={props.bothSides != null}
         handle={mapRef}
         dim={props.dim}
       />

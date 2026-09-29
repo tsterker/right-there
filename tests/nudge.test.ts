@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ballisticGain,
   describeNudge,
+  recentMove,
   Nudger,
   PX_PER_CM,
   sensitivityFromSwipes,
@@ -107,4 +108,24 @@ describe('describeNudge', () => {
     expect(describeNudge({ x: 5, y: -5 }, 8)).toBe('Higher and further apart');
   });
 
+});
+
+describe('recentMove', () => {
+  const at = (x: number, t: number) => ({ p: { x, y: 0 }, t });
+  it('follows a change of direction mid-stroke', () => {
+    const left = [at(0, 0), at(-3, 100), at(-6, 200), at(-8, 300)];
+    expect(recentMove(left)!.x).toBeLessThan(0);
+    // Still left of the start, but heading right now.
+    const back = [...left, at(-7, 400), at(-5, 500)];
+    expect(recentMove(back)!.x).toBeGreaterThan(0);
+  });
+
+  it('is null while the finger pauses or before there is a move', () => {
+    expect(recentMove([at(0, 0), at(3, 100), at(3.1, 400), at(3.1, 600)])).toBeNull();
+    expect(recentMove([at(0, 0)])).toBeNull();
+  });
+
+  it('uses the last two samples when updates are sparse', () => {
+    expect(recentMove([at(0, 0), at(4, 900)])).toEqual({ x: 4, y: 0 });
+  });
 });

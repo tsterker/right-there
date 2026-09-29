@@ -14,6 +14,7 @@ export const otherRole = (r: Role): Role => (r === 'A' ? 'B' : 'A');
 export const ROLE_NAME: Record<Role, string> = { A: 'Receiver', B: 'Giver' };
 
 export type InputMode = 'nudge' | 'map';
+export type Side = 'left' | 'right';
 export type TargetSource = 'nudge' | 'map' | 'anchor';
 
 export interface Target {
@@ -35,8 +36,11 @@ export interface SessionState {
   target: Target | null;
   /** The receiver's last "right there" (double-tap). */
   good: { id: string; at: number; pos: Vec | null } | null;
-  /** Work both sides at once: the spot and its mirror across the spine, one hand each. */
-  bothSides: boolean;
+  /**
+   * Work both sides at once: the spot and its mirror across the spine, one hand each.
+   * Null: one side. Otherwise the side of the spot the receiver steers; the mirror follows.
+   */
+  bothSides: Side | null;
   nextId: number;
 }
 
@@ -69,7 +73,7 @@ export function initialState(code: string, now: number): SessionState {
     members: { A: { connected: false, joined: false }, B: { connected: false, joined: false } },
     target: null,
     good: null,
-    bothSides: false,
+    bothSides: null,
     nextId: 1,
   };
 }
@@ -85,16 +89,32 @@ export function reduce(s: SessionState, action: Action, meta: Meta): SessionStat
         members: { ...s.members, [action.role]: { connected: action.connected, joined: prev.joined || action.connected } },
       };
     }
-    case 'target':
+    case 'target': {
+      let pos = clampToBody(action.pos);
+      let bothSides = s.bothSides;
+      // Nudges steer one spot, which stops at the spine; a touch or "I'm here" picks the side it lands on.
+      if (bothSides) {
+        if (action.source === 'nudge') pos = keepSide(pos, bothSides);
+        else bothSides = sideOf(pos.x, bothSides);
+      }
       return {
         ...s,
-        target: { pos: clampToBody(action.pos), active: action.active, source: action.source, from: action.from ?? null, by, at },
+        bothSides,
+        target: { pos, active: action.active, source: action.source, from: action.from ?? null, by, at },
       };
+    }
     case 'good':
       return { ...s, nextId: s.nextId + 1, good: { id: `g${s.nextId}`, at, pos: s.target?.pos ?? null } };
     case 'bothSides':
-      return { ...s, bothSides: action.on };
+      return { ...s, bothSides: action.on ? sideOf(s.target?.pos.x ?? 0, 'right') : null };
   }
+}
+
+export const sideOf = (x: number, onSpine: Side): Side => (x < 0 ? 'left' : x > 0 ? 'right' : onSpine);
+
+/** Working both sides, a steered spot stops at the spine: crossing it would swap it with its mirror. */
+export function keepSide(p: Vec, side: Side): Vec {
+  return { x: side === 'left' ? Math.min(0, p.x) : Math.max(0, p.x), y: p.y };
 }
 
 // ---------------------------------------------------------------------------

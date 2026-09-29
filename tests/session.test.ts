@@ -34,16 +34,22 @@ describe('reducer', () => {
     expect(run([[{ type: 'good' }, 'A', 1]]).good?.pos).toBeNull();
   });
 
-  it('switches both sides on and off without touching the spot', () => {
-    const at = { x: 6, y: 20 };
+  it('works both sides from the side the spot is on; nudges stop at the spine', () => {
+    expect(initialState('1234', 0).bothSides).toBeNull();
     const on = run([
-      [{ type: 'target', pos: at, active: false, source: 'nudge' }, 'A', 1],
+      [{ type: 'target', pos: { x: -6, y: 20 }, active: false, source: 'nudge' }, 'A', 1],
       [{ type: 'bothSides', on: true }, 'A', 2],
     ]);
-    expect(initialState('1234', 0).bothSides).toBe(false);
-    expect(on.bothSides).toBe(true);
-    expect(on.target?.pos).toEqual(at);
-    expect(reduce(on, { type: 'bothSides', on: false }, { from: 'A', at: 3 }).bothSides).toBe(false);
+    expect(on.bothSides).toBe('left');
+    expect(on.target?.pos).toEqual({ x: -6, y: 20 });
+    const across = reduce(on, { type: 'target', pos: { x: 4, y: 22 }, active: true, source: 'nudge' }, { from: 'A', at: 3 });
+    expect(across.target?.pos).toEqual({ x: 0, y: 22 });
+    expect(across.bothSides).toBe('left');
+    const touched = reduce(on, { type: 'target', pos: { x: 8, y: 30 }, active: false, source: 'map' }, { from: 'A', at: 3 });
+    expect(touched.target?.pos).toEqual({ x: 8, y: 30 });
+    expect(touched.bothSides).toBe('right');
+    expect(reduce(on, { type: 'bothSides', on: false }, { from: 'A', at: 4 }).bothSides).toBeNull();
+    expect(run([[{ type: 'bothSides', on: true }, 'A', 1]]).bothSides).toBe('right');
   });
 });
 

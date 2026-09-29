@@ -162,3 +162,16 @@ export function describeNudge(d: Vec, bothSidesAt?: number): string | null {
   else text = `${amount}${vert} and ${horiz}`;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/**
+ * Where the spot went over the last `windowMs` of a stroke (body cm), so the
+ * cue follows a change of mind mid-drag rather than the whole stroke. Samples
+ * oldest first; null while it barely moved (the finger paused).
+ */
+export function recentMove(samples: { p: Vec; t: number }[], windowMs = 250): Vec | null {
+  const last = samples[samples.length - 1];
+  const base = samples.find((q) => q !== last && last.t - q.t <= windowMs) ?? samples[samples.length - 2];
+  if (!last || !base) return null;
+  const d = { x: last.p.x - base.p.x, y: last.p.y - base.p.y };
+  return len(d) < 0.3 ? null : d;
+}

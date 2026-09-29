@@ -22,7 +22,7 @@ import {
   TORSO_OUTLINE,
   VERTEBRAE,
 } from '../../shared/body';
-import { apply, clamp, len, MIRROR_X, mul, rotation, smoothPath, sub, transpose, type Mat2, type Vec } from '../../shared/geometry';
+import { apply, clamp, len, MIRROR_X, mul, rotation, smoothPath, transpose, type Mat2, type Vec } from '../../shared/geometry';
 
 export interface MapHandle {
   /** Client (CSS px) → body cm. */
@@ -36,8 +36,8 @@ export interface BackMapProps {
   /** Glide the dot toward new positions instead of jumping (network jitter). */
   smooth?: boolean;
   trail?: Vec[];
-  /** The latest nudge: the spot points its way. A new `id` (a new stroke) pings. `live`: the finger is still moving. */
-  heading?: { from: Vec; to: Vec; id: string; live: boolean } | null;
+  /** Where the current nudge is going (body cm): the spot smudges that way. A new `id` (a new stroke) pings. */
+  heading?: { d: Vec; id: string; live: boolean } | null;
   /** Also draw the spot mirrored across the spine (working both sides). */
   bothSides?: boolean;
   dim?: boolean;
@@ -134,29 +134,25 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
 
 const SPOT_R = 6.4;
 
-/** A drop around the spot whose tip points along +x, `tip` cm from the centre. */
-function dropPath(tip: number): string {
-  const c = SPOT_R / tip;
-  const tx = f2(SPOT_R * c);
-  const ty = f2(SPOT_R * Math.sqrt(1 - c * c));
-  return `M${tx} ${-ty}L${f2(tip)} 0L${tx} ${ty}A${SPOT_R} ${SPOT_R} 0 1 1 ${tx} ${-ty}Z`;
-}
-
 interface SpotProps {
   target: { pos: Vec; active: boolean };
   smooth: boolean;
   m: Mat2;
-  /** The latest nudge in view space: its direction and length (cm). */
+  /** Where the current nudge is going, in view space (cm). */
   heading: { d: Vec; id: string; live: boolean } | null;
   uid: string;
+  /** Radius (cm). */
+  r?: number;
 }
 
 /**
  * The spot: a soft cloud about the size of a palm, because it is where the
- * hands roughly are, not a point. A nudge pulls it into a drop pointing the
- * nudge's way (longer for bigger nudges) and pings once as the stroke starts.
+ * hands roughly are, not a point. While a nudge moves it, the cloud smudges
+ * toward where it's going (further for faster moves) behind a faint
+ * arrowhead, and pings once as the stroke starts. When the finger lifts, it
+ * eases back into a round cloud.
  */
-function Spot({ target, smooth, m, heading, uid }: SpotProps) {
+function Spot({ target, smooth, m, heading, uid, r = SPOT_R }: SpotProps) {
   const ref = useRef<SVGGElement>(null);
   const cur = useRef<Vec | null>(null);
   const { x, y } = apply(m, target.pos);
@@ -183,19 +179,32 @@ function Spot({ target, smooth, m, heading, uid }: SpotProps) {
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [x, y, smooth]);
+  // Only a stroke that starts while the spot is shown pings (not a twin appearing, nor a reconnect).
+  const unpinged = useRef(heading?.id ?? null);
+  const live = heading?.live ?? false;
+  // Stretch along the heading with the back edge in place, so the smudge leads the spot.
+  const k = live ? 1 + clamp(0.25 + len(heading!.d) * 0.1, 0.3, 0.65) : 1;
+  const deg = heading ? f2((Math.atan2(heading.d.y, heading.d.x) * 180) / Math.PI) : 0;
   return (
     <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      <circle r={SPOT_R} className="map-cloud" fill={`url(#${uid}-cloud)`} />
-      {heading && (
-        <g
-          key={heading.id}
-          transform={`rotate(${f2((Math.atan2(heading.d.y, heading.d.x) * 180) / Math.PI)})`}
-          className={heading.live ? 'map-heading is-live' : 'map-heading'}
-        >
-          <circle r={SPOT_R} className="map-ping" />
-          <path d={dropPath(SPOT_R + clamp(len(heading.d) * 0.6, 3, 10))} className="map-drop" />
+      <g transform={`rotate(${deg})`}>
+        {heading && heading.id !== unpinged.current && <circle key={heading.id} r={r} className="map-ping" />}
+        <g className="map-cloud">
+          <ellipse
+            rx={r}
+            ry={r}
+            className={`map-smudge${live ? ' is-live' : ''}`}
+            fill={`url(#${uid}-cloud)`}
+            style={{ transform: `translateX(${f2((k - 1) * r)}px) scaleX(${f2(k)})` }}
+          />
         </g>
-      )}
+        <path
+          d="M-2.4 -3.6 L0.6 0 L-2.4 3.6"
+          className={`map-smudge-tip${live ? ' is-live' : ''}`}
+          filter={`url(#${uid}-blur)`}
+          style={{ transform: `translateX(${f2((2 * k - 1) * r - 1.2)}px)` }}
+        />
+      </g>
       <circle r={1.1} className="map-dot-core" />
     </g>
   );
@@ -221,13 +230,13 @@ export function BackMap(props: BackMapProps) {
     [inv],
   );
 
-  const spotHeading = (h: typeof heading, flip: boolean) => {
-    if (!h) return null;
-    const d = sub(h.to, h.from);
-    return len(d) > 0.5 ? { d: apply(m, flip ? { x: -d.x, y: d.y } : d), id: h.id, live: h.live } : null;
-  };
-  // Both sides: the mirror twin, unless the spot sits on the spine and the two would overlap.
-  const twin = target && bothSides && Math.abs(target.pos.x) > 2.5 ? { ...target, pos: { x: -target.pos.x, y: target.pos.y } } : null;
+  const spotHeading = (flip: boolean) =>
+    heading && len(heading.d) > 0.3 ? { ...heading, d: apply(m, flip ? { x: -heading.d.x, y: heading.d.y } : heading.d) } : null;
+  // Both sides: the spot and its mirror, each one hand wide; right by the spine the two are one spot on it.
+  const r = bothSides ? SPOT_R * 0.75 : SPOT_R;
+  const pair = target && bothSides && Math.abs(target.pos.x) > 2.5;
+  const spot = target && bothSides && !pair ? { ...target, pos: { x: 0, y: target.pos.y } } : target;
+  const twin = pair ? { ...target, pos: { x: -target.pos.x, y: target.pos.y } } : null;
 
   const labelY = crop === 'torso' ? -5 : -7;
   const labels = [
@@ -245,6 +254,9 @@ export function BackMap(props: BackMapProps) {
       aria-label="Map of the back"
     >
       <defs>
+        <filter id={`${uid}-blur`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="0.6" />
+        </filter>
         <radialGradient id={`${uid}-cloud`}>
           <stop offset="0%" className="map-cloud-a" />
           <stop offset="45%" className="map-cloud-b" />
@@ -258,8 +270,8 @@ export function BackMap(props: BackMapProps) {
         )}
       </g>
       <g className="map-view">
-        {target && <Spot target={target} smooth={smooth} m={m} heading={spotHeading(heading, false)} uid={uid} />}
-        {twin && <Spot key="twin" target={twin} smooth={smooth} m={m} heading={spotHeading(heading, true)} uid={uid} />}
+        {spot && <Spot target={spot} smooth={smooth} m={m} heading={spotHeading(false)} uid={uid} r={r} />}
+        {twin && <Spot key="twin" target={twin} smooth={smooth} m={m} heading={spotHeading(true)} uid={uid} r={r} />}
         {labels.map((l) => (
           <g key={l.t} transform={`translate(${f2(l.p.x)} ${f2(l.p.y)})`} className="map-side-label">
             <circle r={2.6} />

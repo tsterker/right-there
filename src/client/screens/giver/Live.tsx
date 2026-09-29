@@ -16,6 +16,7 @@ import { navigate } from '../../lib/router';
 import { useGiverSettings } from '../../lib/settings';
 import { say, unlockSpeech } from '../../lib/speech';
 import { useNow } from '../../lib/time';
+import { useHeading } from '../../lib/heading';
 import { useTrail } from '../../lib/trail';
 import { ViewpointPicker, VoiceToggle } from './common';
 
@@ -35,12 +36,9 @@ export function GiverLive() {
   const t = useNow(250, now);
   const target = state.target;
   const trail = useTrail(target);
-
-  // A nudge points while the finger moves, then fades out quickly.
-  const nudge =
-    target?.source === 'nudge' && target.from && (target.active || t - target.at < NUDGE_MS)
-      ? { from: target.from, to: target.pos, id: `${target.from.x},${target.from.y}`, live: target.active }
-      : null;
+  const heading = useHeading(target);
+  // A nudge points while the finger moves, then settles back quickly.
+  const nudge = heading && target && (heading.live || t - target.at < NUDGE_MS) ? heading : null;
   const region = target ? classify(target.pos) : null;
   const good = state.good && t - state.good.at < 4000 ? state.good : null;
   // A "right there" on a spot the receiver touched in map mode can teach their map.
@@ -85,7 +83,7 @@ export function GiverLive() {
             smooth
             trail={trail}
             heading={nudge}
-            bothSides={state.bothSides}
+            bothSides={state.bothSides != null}
           />
           {!target && <div className="map-overlay-hint soft">Waiting for them to point…</div>}
           {anchoring && <div className="map-overlay-hint">Tap where your hands are now</div>}
@@ -94,7 +92,7 @@ export function GiverLive() {
         </div>
         {/* The map shows the area; its name is for screen readers (and spoken cues). */}
         <p className="region-name sr-only" aria-live="polite">
-          {region ? regionName(region, state.bothSides) : 'No spot yet'}
+          {region ? regionName(region, state.bothSides != null) : 'No spot yet'}
         </p>
       </div>
 
@@ -147,7 +145,7 @@ function useGiverVoice(voice: boolean) {
       const region = classify(pos);
       if (region !== lastRegion.current) {
         lastRegion.current = region;
-        say(regionName(region, state.bothSides), 'normal');
+        say(regionName(region, state.bothSides != null), 'normal');
       } else if (a.source === 'nudge' && a.from) {
         const text = describeNudge(sub(pos, a.from), state.bothSides ? pos.x : undefined);
         if (text) say(text, 'low');

@@ -27,6 +27,9 @@ describe('regions', () => {
     expect(regionName('trap_r')).toBe('Top of the right shoulder');
     expect(regionName('neck_mid')).toBe('Back of the neck');
     expect(regionName('sacrum')).toBe('Sacrum');
+    expect(regionName('scapula_l', true)).toBe('Both shoulder blades');
+    expect(regionName('trap_r', true)).toBe('Tops of both shoulders');
+    expect(regionName('upper_spine', true)).toBe('Upper spine');
   });
 
   it('keeps points on the body', () => {

@@ -1,13 +1,13 @@
 /**
  * The giver's screen: where the hands should be. Glanceable (the map fills
- * the screen, each nudge replays a cue), hands-free (spoken cues), touchable
- * with a knuckle (one big button).
+ * the screen, the spot points and pings with each nudge), hands-free (spoken
+ * cues), touchable with a knuckle (one big button).
  */
-import { useMemo, useRef, useState } from 'react';
-import { apply, sub } from '../../../shared/geometry';
-import { arrowFor, describeNudge } from '../../../shared/nudge';
+import { useRef, useState } from 'react';
+import { sub } from '../../../shared/geometry';
+import { describeNudge } from '../../../shared/nudge';
 import { classify, regionName } from '../../../shared/regions';
-import { BackMap, viewMatrix, type MapHandle } from '../../components/BackMap';
+import { BackMap, type MapHandle } from '../../components/BackMap';
 import { StatusBar } from '../../components/StatusBar';
 import { Sheet, Toast } from '../../components/ui';
 import { useActions, useSession } from '../../lib/connection';
@@ -19,7 +19,11 @@ import { useNow } from '../../lib/time';
 import { useTrail } from '../../lib/trail';
 import { ViewpointPicker, VoiceToggle } from './common';
 
-const NUDGE_MS = 8000;
+/**
+ * How long a nudge keeps pointing after the finger lifts. Short, so the map
+ * stays snappy: a giver who missed it gets the next nudge.
+ */
+const NUDGE_MS = 1200;
 
 export function GiverLive() {
   const { state, dispatch, now, conn } = useSession();
@@ -28,17 +32,15 @@ export function GiverLive() {
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const mapRef = useRef<MapHandle>(null);
-  const t = useNow(500, now);
+  const t = useNow(250, now);
   const target = state.target;
   const trail = useTrail(target);
-  const m = useMemo(() => viewMatrix(settings.viewAngle), [settings.viewAngle]);
 
-  // A nudge shows while the finger moves and for a while after, fading, so a fresh one looks fresh.
+  // A nudge points while the finger moves, then fades out quickly.
   const nudge =
     target?.source === 'nudge' && target.from && (target.active || t - target.at < NUDGE_MS)
-      ? { from: target.from, to: target.pos, id: `${target.from.x},${target.from.y},${target.active}`, live: target.active }
+      ? { from: target.from, to: target.pos, id: `${target.from.x},${target.from.y}`, live: target.active }
       : null;
-  const nudgeText = nudge ? describeNudge(sub(nudge.to, nudge.from)) : null;
   const region = target ? classify(target.pos) : null;
   const good = state.good && t - state.good.at < 4000 ? state.good : null;
   // A "right there" on a spot the receiver touched in map mode can teach their map.
@@ -75,19 +77,24 @@ export function GiverLive() {
 
       <div className="live-body">
         <div className={`live-map${anchoring ? ' is-picking' : ''}`} onPointerUp={onMap}>
-          <BackMap angle={settings.viewAngle} crop="torso" handle={mapRef} target={target} smooth trail={trail} heading={nudge} />
+          <BackMap
+            angle={settings.viewAngle}
+            crop="torso"
+            handle={mapRef}
+            target={target}
+            smooth
+            trail={trail}
+            heading={nudge}
+            bothSides={state.bothSides}
+          />
           {!target && <div className="map-overlay-hint soft">Waiting for them to point…</div>}
           {anchoring && <div className="map-overlay-hint">Tap where your hands are now</div>}
-          {nudgeText && nudge && !anchoring && (
-            <div key={nudge.id} className={`nudge-chip${nudge.live ? ' is-live' : ''}`}>
-              <span className="nudge-arrow">{arrowFor(apply(m, sub(nudge.to, nudge.from)))}</span> {nudgeText}
-            </div>
-          )}
+          {state.bothSides && <div className="map-mode-chip">⇆ Both sides</div>}
           <Toast id={toast?.id ?? null}>{toast?.text}</Toast>
         </div>
         {/* The map shows the area; its name is for screen readers (and spoken cues). */}
         <p className="region-name sr-only" aria-live="polite">
-          {region ? regionName(region) : 'No spot yet'}
+          {region ? regionName(region, state.bothSides) : 'No spot yet'}
         </p>
       </div>
 
@@ -140,11 +147,16 @@ function useGiverVoice(voice: boolean) {
       const region = classify(pos);
       if (region !== lastRegion.current) {
         lastRegion.current = region;
-        say(regionName(region), 'normal');
+        say(regionName(region, state.bothSides), 'normal');
       } else if (a.source === 'nudge' && a.from) {
-        const text = describeNudge(sub(pos, a.from));
+        const text = describeNudge(sub(pos, a.from), state.bothSides ? pos.x : undefined);
         if (text) say(text, 'low');
       }
+      return;
+    }
+    if (a.type === 'bothSides') {
+      lastRegion.current = null;
+      say(a.on ? 'Both sides' : 'One side', 'normal');
       return;
     }
     if (a.type === 'presence' && a.role === 'A' && !a.connected) say('Their phone disconnected', 'normal');

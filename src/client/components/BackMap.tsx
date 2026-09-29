@@ -22,7 +22,7 @@ import {
   TORSO_OUTLINE,
   VERTEBRAE,
 } from '../../shared/body';
-import { apply, len, MIRROR_X, mul, rotation, smoothPath, sub, transpose, type Mat2, type Vec } from '../../shared/geometry';
+import { apply, clamp, len, MIRROR_X, mul, rotation, smoothPath, sub, transpose, type Mat2, type Vec } from '../../shared/geometry';
 
 export interface MapHandle {
   /** Client (CSS px) → body cm. */
@@ -36,8 +36,10 @@ export interface BackMapProps {
   /** Glide the dot toward new positions instead of jumping (network jitter). */
   smooth?: boolean;
   trail?: Vec[];
-  /** The latest nudge: the spot points its way. `id` changes per stroke and on release, replaying the cue. */
+  /** The latest nudge: the spot points its way. A new `id` (a new stroke) pings. `live`: the finger is still moving. */
   heading?: { from: Vec; to: Vec; id: string; live: boolean } | null;
+  /** Also draw the spot mirrored across the spine (working both sides). */
+  bothSides?: boolean;
   dim?: boolean;
   /** 'torso' trims the top of the head and the arms' edges, so the back is drawn bigger. */
   crop?: 'full' | 'torso';
@@ -130,19 +132,29 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
   );
 });
 
+const SPOT_R = 6.4;
+
+/** A drop around the spot whose tip points along +x, `tip` cm from the centre. */
+function dropPath(tip: number): string {
+  const c = SPOT_R / tip;
+  const tx = f2(SPOT_R * c);
+  const ty = f2(SPOT_R * Math.sqrt(1 - c * c));
+  return `M${tx} ${-ty}L${f2(tip)} 0L${tx} ${ty}A${SPOT_R} ${SPOT_R} 0 1 1 ${tx} ${-ty}Z`;
+}
+
 interface SpotProps {
   target: { pos: Vec; active: boolean };
   smooth: boolean;
   m: Mat2;
-  /** View-space direction of the latest nudge. */
-  heading: { dir: Vec; id: string; live: boolean } | null;
+  /** The latest nudge in view space: its direction and length (cm). */
+  heading: { d: Vec; id: string; live: boolean } | null;
   uid: string;
 }
 
 /**
  * The spot: a soft cloud about the size of a palm, because it is where the
- * hands roughly are, not a point. After a nudge it leans the nudge's way,
- * chevrons march ahead of it and a ring pings once, so a glance catches it.
+ * hands roughly are, not a point. A nudge pulls it into a drop pointing the
+ * nudge's way (longer for bigger nudges) and pings once as the stroke starts.
  */
 function Spot({ target, smooth, m, heading, uid }: SpotProps) {
   const ref = useRef<SVGGElement>(null);
@@ -171,28 +183,26 @@ function Spot({ target, smooth, m, heading, uid }: SpotProps) {
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [x, y, smooth]);
-  const deg = heading ? f2((Math.atan2(heading.dir.y, heading.dir.x) * 180) / Math.PI) : 0;
   return (
     <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      <g transform={`rotate(${deg})`}>
-        {/* Leaning the nudge's way: the hands are somewhere along that line. */}
-        <ellipse rx={heading ? 8.4 : 6.4} ry={heading ? 5.2 : 6.4} cx={heading ? 1.6 : 0} className="map-cloud" fill={`url(#${uid}-cloud)`} />
-        {heading && (
-          <g key={heading.id} className={heading.live ? 'map-heading is-live' : 'map-heading'}>
-            {!heading.live && <circle r={6.4} className="map-ping" />}
-            {[10, 13.5].map((cx, i) => (
-              <path key={cx} d={`M${cx - 1.6} -2.6 L${cx + 0.8} 0 L${cx - 1.6} 2.6`} className="map-chevron" style={{ animationDelay: `${i * 0.18}s` }} />
-            ))}
-          </g>
-        )}
-      </g>
+      <circle r={SPOT_R} className="map-cloud" fill={`url(#${uid}-cloud)`} />
+      {heading && (
+        <g
+          key={heading.id}
+          transform={`rotate(${f2((Math.atan2(heading.d.y, heading.d.x) * 180) / Math.PI)})`}
+          className={heading.live ? 'map-heading is-live' : 'map-heading'}
+        >
+          <circle r={SPOT_R} className="map-ping" />
+          <path d={dropPath(SPOT_R + clamp(len(heading.d) * 0.6, 3, 10))} className="map-drop" />
+        </g>
+      )}
       <circle r={1.1} className="map-dot-core" />
     </g>
   );
 }
 
 export function BackMap(props: BackMapProps) {
-  const { angle = 0, mirrored = false, target, smooth = false, trail, heading, dim, crop = 'full', handle } = props;
+  const { angle = 0, mirrored = false, target, smooth = false, trail, heading, bothSides = false, dim, crop = 'full', handle } = props;
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const m = useMemo(() => viewMatrix(angle, mirrored), [angle, mirrored]);
   const inv = useMemo(() => transpose(m), [m]);
@@ -211,8 +221,13 @@ export function BackMap(props: BackMapProps) {
     [inv],
   );
 
-  const dir = heading ? apply(m, sub(heading.to, heading.from)) : null;
-  const spotHeading = heading && dir && len(dir) > 0.5 ? { dir, id: heading.id, live: heading.live } : null;
+  const spotHeading = (h: typeof heading, flip: boolean) => {
+    if (!h) return null;
+    const d = sub(h.to, h.from);
+    return len(d) > 0.5 ? { d: apply(m, flip ? { x: -d.x, y: d.y } : d), id: h.id, live: h.live } : null;
+  };
+  // Both sides: the mirror twin, unless the spot sits on the spine and the two would overlap.
+  const twin = target && bothSides && Math.abs(target.pos.x) > 2.5 ? { ...target, pos: { x: -target.pos.x, y: target.pos.y } } : null;
 
   const labelY = crop === 'torso' ? -5 : -7;
   const labels = [
@@ -243,7 +258,8 @@ export function BackMap(props: BackMapProps) {
         )}
       </g>
       <g className="map-view">
-        {target && <Spot target={target} smooth={smooth} m={m} heading={spotHeading} uid={uid} />}
+        {target && <Spot target={target} smooth={smooth} m={m} heading={spotHeading(heading, false)} uid={uid} />}
+        {twin && <Spot key="twin" target={twin} smooth={smooth} m={m} heading={spotHeading(heading, true)} uid={uid} />}
         {labels.map((l) => (
           <g key={l.t} transform={`translate(${f2(l.p.x)} ${f2(l.p.y)})`} className="map-side-label">
             <circle r={2.6} />

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arrowFor,
   ballisticGain,
   describeNudge,
   Nudger,
@@ -102,8 +101,10 @@ describe('describeNudge', () => {
     expect(describeNudge({ x: 0.2, y: 0.3 })).toBeNull();
   });
 
-  it('draws screen arrows', () => {
-    expect(arrowFor({ x: 0, y: -1 })).toBe('↑');
-    expect(arrowFor({ x: 1, y: 1 })).toBe('↘');
+  it('speaks of the two hands when working both sides', () => {
+    expect(describeNudge({ x: -6, y: 0 }, -5)).toBe('Further apart');
+    expect(describeNudge({ x: -6, y: 0 }, 5)).toBe('Closer together');
+    expect(describeNudge({ x: 5, y: -5 }, 8)).toBe('Higher and further apart');
   });
+
 });

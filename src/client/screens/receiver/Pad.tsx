@@ -35,6 +35,11 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
     haptic('double');
     note('♥ Right there');
   };
+  const setBothSides = (on: boolean) => {
+    dispatch({ type: 'bothSides', on });
+    haptic('confirm');
+    note(on ? '⇆ Both sides' : 'One side');
+  };
 
   // Eyes-free: quietly name the area when the spot settles somewhere new.
   const spokenRegion = useRef<string | null>(null);
@@ -65,11 +70,13 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
         target={state.target}
         dispatch={dispatch}
         dim={settings.dim}
+        bothSides={state.bothSides}
         onRightThere={rightThere}
+        onTwoFingerTap={() => setBothSides(!state.bothSides)}
         onTune={(tune) => setProfile({ tune })}
       >
         <div className="pad-hint">
-          {profile.mode === 'nudge' ? 'Drag anywhere to move the spot' : 'Touch where you want it'} · double-tap = right there
+          {profile.mode === 'nudge' ? 'Drag to move' : 'Touch the spot'} · double-tap = right there · two fingers = both sides
         </div>
         <Toast id={toast?.id ?? null}>{toast?.text}</Toast>
       </TouchPad>
@@ -102,6 +109,11 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
             </label>
           </>
         )}
+        <h4>Massage</h4>
+        <label className="toggle">
+          <input type="checkbox" checked={state.bothSides} onChange={(e) => setBothSides(e.target.checked)} />
+          Both sides at once (two-finger tap)
+        </label>
         <h4>This device</h4>
         <label className="toggle">
           <input type="checkbox" checked={settings.dim} onChange={(e) => setSettings({ dim: e.target.checked })} />

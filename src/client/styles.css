@@ -453,29 +453,39 @@ label.slider input {
   fill: #ffd9c7;
   opacity: 0.9;
 }
-.map-chevron {
-  fill: none;
+.map-drop {
+  fill: var(--accent);
+  fill-opacity: 0.14;
   stroke: var(--accent-2);
-  stroke-width: 1.1;
-  stroke-linecap: round;
+  stroke-width: 0.45;
   stroke-linejoin: round;
-  animation: chevron 0.9s ease-out infinite both;
+  stroke-opacity: 0.9;
 }
-/* A settled nudge marches a few times, then stays as a faint pointer until it expires. */
-.map-heading {
-  animation: heading-age 8s forwards;
+/* Points while the finger moves; once it lifts, fades within about a second. */
+.map-heading:not(.is-live) .map-drop {
+  animation: heading-fade 1.2s ease-in forwards;
 }
-.map-heading:not(.is-live) .map-chevron {
-  animation-iteration-count: 4;
-  animation-fill-mode: backwards;
-}
+/* One ping as a stroke starts: the earliest moment the giver can react. */
 .map-ping {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 0.3;
+  stroke-width: 0.35;
   transform-box: fill-box;
   transform-origin: center;
-  animation: ping 0.9s ease-out 2 both;
+  animation: ping 0.7s ease-out both;
+}
+.map-mode-chip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(20, 25, 34, 0.9);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+  pointer-events: none;
 }
 .map-side-label circle {
   fill: var(--surface-2);
@@ -895,30 +905,6 @@ label.slider input {
 .banner-good {
   background: #a42d67;
 }
-.nudge-chip {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  max-width: calc(100% - 24px);
-  transform: translateX(-50%);
-  white-space: nowrap;
-  background: rgba(20, 25, 34, 0.92);
-  border: 1px solid var(--accent);
-  padding: 8px 18px;
-  border-radius: 999px;
-  font-weight: 750;
-  font-size: 18px;
-  pointer-events: none;
-  animation: nudge-age 8s forwards;
-}
-.nudge-chip.is-live {
-  animation: nudge-in 0.25s both;
-}
-.nudge-arrow {
-  color: var(--accent);
-  font-size: 22px;
-}
-
 /* ---------- demo ---------- */
 
 .demo {
@@ -1039,19 +1025,6 @@ label.slider input {
     transform: scale(1.06);
   }
 }
-@keyframes chevron {
-  0% {
-    opacity: 0;
-    transform: translateX(-1.5px);
-  }
-  35% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(2.5px);
-  }
-}
 @keyframes ping {
   0% {
     opacity: 0.9;
@@ -1062,38 +1035,13 @@ label.slider input {
     transform: scale(2.4);
   }
 }
-@keyframes heading-age {
+@keyframes heading-fade {
   0%,
-  45% {
+  30% {
     opacity: 1;
   }
   100% {
-    opacity: 0.35;
-  }
-}
-@keyframes nudge-in {
-  from {
     opacity: 0;
-    transform: translateX(-50%) scale(0.9);
-  }
-}
-@keyframes nudge-age {
-  0% {
-    opacity: 0;
-    transform: translateX(-50%) scale(0.9);
-  }
-  3% {
-    opacity: 1;
-    transform: translateX(-50%) scale(1.08);
-  }
-  7%,
-  60% {
-    opacity: 1;
-    transform: translateX(-50%);
-  }
-  100% {
-    opacity: 0.25;
-    transform: translateX(-50%);
   }
 }
 @keyframes banner {
@@ -1129,8 +1077,6 @@ label.slider input {
 
 @media (prefers-reduced-motion: reduce) {
   .map-cloud,
-  .map-chevron,
-  .nudge-chip,
   .pulse,
   .conn.is-reconnecting,
   .act-teach,

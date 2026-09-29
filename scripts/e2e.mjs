@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices } from 'playwright-core';
 import { createServer } from 'vite';
-import { codeOf, mouseDrag, onMap, pair, setupSwipes, sleep, touchDrag, touchTaps } from './drive.mjs';
+import { codeOf, mouseDrag, onMap, pair, setupSwipes, sleep, touchDrag, touchTaps, touchTwoFingerTap } from './drive.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name, fallback) => {
@@ -114,9 +114,9 @@ try {
   check((await iphone.locator('.toast').innerText()).includes('toward your head'), 'swipes understood: phone top toward the head');
   check((await mac.locator('.region-name').textContent()) === 'No spot yet', 'Mac waits for the first pointing');
   await touchDrag(iphone, { x: 190, y: 420 }, { x: 250, y: 330 }, 900);
-  await mac.waitForSelector('.nudge-chip', { timeout: 5000 });
+  await mac.waitForSelector('.map-heading', { timeout: 5000 });
   const region = await mac.locator('.region-name').textContent();
-  check(region !== 'No spot yet', `Mac follows the nudge: "${region}", "${(await mac.locator('.nudge-chip').innerText()).trim()}"`);
+  check(region !== 'No spot yet', `Mac follows the nudge and points its way: "${region}"`);
   await shot(mac, 'mac-live-nudge');
   await shot(iphone, 'phone-pad-nudge');
 
@@ -126,6 +126,13 @@ try {
   await mac.waitForSelector('.banner-good', { timeout: 5000 });
   check((await mac.locator('.region-name').textContent()) === region, 'Mac shows "♥ Right there"; the double-tap did not move the spot');
   await shot(mac, 'mac-right-there');
+  await touchTwoFingerTap(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 });
+  await mac.waitForSelector('.map-mode-chip', { timeout: 5000 });
+  check((await iphone.locator('.toast').innerText()).includes('Both sides'), 'two-finger tap: both sides on the phone and the Mac');
+  await shot(mac, 'mac-both-sides');
+  await touchTwoFingerTap(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 });
+  await mac.waitForSelector('.map-mode-chip', { state: 'detached', timeout: 5000 });
+  check(true, 'another two-finger tap: back to one side');
 
   console.log('4. Map mode: touch a spot, ♥, giver confirms where the hands are → the map learns');
   await iphone.getByRole('radio', { name: /Map/ }).click();
@@ -196,7 +203,7 @@ try {
   const mid = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
   const end = { x: mid.x + 60, y: mid.y - 90 };
   await mouseDrag(desk, mid, end);
-  await gx.locator('.nudge-chip').waitFor({ timeout: 5000 });
+  await gx.locator('.map-heading').waitFor({ timeout: 5000 });
   await desk.mouse.dblclick(end.x, end.y);
   await gx.locator('.banner-good').waitFor({ timeout: 5000 });
   check(true, 'dragging on the receiver moves the giver’s dot; double-click = right there');

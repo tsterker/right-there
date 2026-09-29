@@ -5,7 +5,8 @@
  *   the calibrated phone orientation (slow = precise, quick = far).
  * - Map mode: touch the spot on the picture; the correction model maps it to
  *   where it really is.
- * Double-tap anywhere = "right there". A haptic tick marks entering a new area.
+ * Double-tap anywhere = "right there". Two-finger tap = both sides on/off.
+ * A haptic tick marks entering a new area.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { clampToBody } from '../../shared/body';
@@ -40,8 +41,8 @@ type Gesture =
       /** Sent at least one active target during this gesture. */
       sent: boolean;
     }
-  /** More than one finger: ignored until all are lifted. */
-  | { kind: 'multi' };
+  /** More than one finger: no pointing. A quick two-finger tap toggles both sides. */
+  | { kind: 'multi'; startT: number; fingers: number; moved: boolean; starts: Map<number, Vec> };
 
 export interface TouchPadProps {
   mode: InputMode;
@@ -53,6 +54,8 @@ export interface TouchPadProps {
   target: Target | null;
   dispatch: (a: Action) => void;
   onRightThere?: () => void;
+  onTwoFingerTap?: () => void;
+  bothSides?: boolean;
   onTune?: (tune: number, reason: 'overshoot' | 'undershoot') => void;
   dim?: boolean;
   children?: ReactNode;
@@ -182,6 +185,11 @@ export function TouchPad(props: TouchPadProps) {
     }
     // A second finger: not a pointing gesture. Settle (map mode: put the spot back) and ignore.
     const g = gesture.current;
+    if (g.kind === 'multi') {
+      g.fingers++;
+      g.starts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      return;
+    }
     if (g.kind === 'single' && g.sent) {
       if (p.current.mode === 'map') {
         place(g.from);
@@ -190,13 +198,26 @@ export function TouchPad(props: TouchPadProps) {
         emit(posRef.current, false, g.from);
       }
     }
-    gesture.current = { kind: 'multi' };
+    const starts = new Map<number, Vec>([[e.pointerId, { x: e.clientX, y: e.clientY }]]);
+    if (g.kind === 'single') for (const id of pointers.current) if (id !== e.pointerId) starts.set(id, { x: g.sx, y: g.sy });
+    gesture.current = {
+      kind: 'multi',
+      startT: g.kind === 'single' ? g.startT : e.timeStamp,
+      fingers: pointers.current.size,
+      moved: g.kind === 'single' && g.moved,
+      starts,
+    };
     setActive(false);
   };
 
   const onMove = (e: React.PointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
     const g = gesture.current;
+    if (g.kind === 'multi') {
+      const s0 = g.starts.get(e.pointerId);
+      if (s0 && Math.hypot(e.clientX - s0.x, e.clientY - s0.y) > DEAD_ZONE_PX) g.moved = true;
+      return;
+    }
     if (g.kind !== 'single') return;
     if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) > DEAD_ZONE_PX) g.moved = true;
     if (p.current.mode === 'nudge') {
@@ -221,9 +242,11 @@ export function TouchPad(props: TouchPadProps) {
     pointers.current.delete(e.pointerId);
     const g = gesture.current;
     if (g.kind === 'multi') {
+      if (cancelled) g.moved = true;
       if (pointers.current.size === 0) {
         gesture.current = { kind: 'none' };
         follow();
+        if (g.fingers === 2 && !g.moved && e.timeStamp - g.startT < 400) p.current.onTwoFingerTap?.();
       }
       return;
     }
@@ -279,6 +302,7 @@ export function TouchPad(props: TouchPadProps) {
         angle={props.orientation.angle}
         mirrored={props.orientation.mirrored}
         target={{ pos, active }}
+        bothSides={props.bothSides}
         handle={mapRef}
         dim={props.dim}
       />

@@ -143,13 +143,17 @@ export function tuneFromStrokes(strokes: Stroke[], tune: number): TuneResult {
   return { tune, reason: null };
 }
 
-/** Words for a nudge (body cm), relative to the receiver's body. Null if negligible. */
-export function describeNudge(d: Vec): string | null {
+/**
+ * Words for a nudge (body cm), relative to the receiver's body. Null if negligible.
+ * `bothSidesAt`: working both sides, with the spot at this x; sideways then means apart or together.
+ */
+export function describeNudge(d: Vec, bothSidesAt?: number): string | null {
   const l = len(d);
   if (l < 1.2) return null;
   const amount = l < 3.5 ? 'a little ' : l > 12 ? 'a lot ' : '';
   const vert = d.y < 0 ? 'higher' : 'lower';
-  const horiz = d.x < 0 ? 'to their left' : 'to their right';
+  const horiz =
+    bothSidesAt === undefined ? (d.x < 0 ? 'to their left' : 'to their right') : d.x * bothSidesAt > 0 ? 'further apart' : 'closer together';
   const ay = Math.abs(d.y);
   const ax = Math.abs(d.x);
   let text: string;
@@ -157,11 +161,4 @@ export function describeNudge(d: Vec): string | null {
   else if (ax > ay * 2) text = `${amount}${horiz}`;
   else text = `${amount}${vert} and ${horiz}`;
   return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/** Arrow glyph for a direction in screen space (y down). */
-export function arrowFor(v: Vec): string {
-  const arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
-  const idx = ((Math.round(Math.atan2(v.y, v.x) / (Math.PI / 4)) % 8) + 8) % 8;
-  return arrows[idx];
 }

@@ -40,6 +40,20 @@ const NAMES: Record<Base, string> = {
   hip: 'Top of the {side} hip',
 };
 
+/** Sided areas worked on both sides at once. */
+const BOTH: Partial<Record<Base, string>> = {
+  neck: 'Both sides of the neck',
+  trap: 'Tops of both shoulders',
+  deltoid: 'Both shoulder caps',
+  rhomboid: 'Between spine and shoulder blades',
+  scapula: 'Both shoulder blades',
+  midback: 'Both sides of the mid back',
+  lats: 'Both sides of the rib cage',
+  lowback: 'Both sides of the lower back',
+  flank: 'Both sides of the waist',
+  hip: 'Tops of both hips',
+};
+
 function classifyBase(p: Vec): Base {
   const ax = Math.abs(p.x);
   const y = p.y;
@@ -71,9 +85,11 @@ export function classify(p: Vec): RegionId {
   return sided(base) ? `${base}_${p.x < 0 ? 'l' : 'r'}` : base;
 }
 
-export function regionName(id: RegionId): string {
+/** `both`: the area on both sides of the spine ("Both shoulder blades"). */
+export function regionName(id: RegionId, both = false): string {
   const m = /^(.*)_(l|r)$/.exec(id);
   const base = (m && m[1] in NAMES ? m[1] : id in NAMES ? id : 'upper_spine') as Base;
+  if (both && BOTH[base]) return BOTH[base];
   const side = m && m[1] in NAMES ? (m[2] === 'l' ? 'left' : 'right') : '';
   return NAMES[base].replace('{side}', side).replace('{Side}', side.charAt(0).toUpperCase() + side.slice(1));
 }

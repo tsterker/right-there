@@ -43,7 +43,7 @@ async function run(hostEngine, guestEngine) {
 
     const pad = await guest.locator('.touchpad').boundingBox();
     await mouseDrag(guest, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 }, { x: pad.x + pad.width * 0.7, y: pad.y + pad.height * 0.35 });
-    await host.waitForSelector('.nudge-chip', { timeout: 5000 });
+    await host.waitForSelector('.map-heading', { timeout: 5000 });
     await guest.getByRole('button', { name: /Right there/ }).click();
     await host.waitForSelector('.banner-good', { timeout: 5000 });
 

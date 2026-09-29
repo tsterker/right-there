@@ -45,6 +45,18 @@ export async function touchTaps(page, p, count = 1) {
   }
 }
 
+/** Two fingers down and up together, a little apart. */
+export async function touchTwoFingerTap(page, p) {
+  const s = await page.context().newCDPSession(page);
+  const points = [
+    { x: p.x - 30, y: p.y, id: 1 },
+    { x: p.x + 30, y: p.y, id: 2 },
+  ];
+  await s.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: points });
+  await sleep(60);
+  await s.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
 export async function mouseDrag(page, from, to, steps = 16) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();

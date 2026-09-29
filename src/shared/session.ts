@@ -35,6 +35,8 @@ export interface SessionState {
   target: Target | null;
   /** The receiver's last "right there" (double-tap). */
   good: { id: string; at: number; pos: Vec | null } | null;
+  /** Work both sides at once: the spot and its mirror across the spine, one hand each. */
+  bothSides: boolean;
   nextId: number;
 }
 
@@ -49,7 +51,8 @@ export type Action =
       /** Giver confirms their hands are on the spot the receiver just called "right there": a calibration pair. */
       learn?: boolean;
     }
-  | { type: 'good' };
+  | { type: 'good' }
+  | { type: 'bothSides'; on: boolean };
 
 export type ActionType = Action['type'];
 
@@ -66,6 +69,7 @@ export function initialState(code: string, now: number): SessionState {
     members: { A: { connected: false, joined: false }, B: { connected: false, joined: false } },
     target: null,
     good: null,
+    bothSides: false,
     nextId: 1,
   };
 }
@@ -88,6 +92,8 @@ export function reduce(s: SessionState, action: Action, meta: Meta): SessionStat
       };
     case 'good':
       return { ...s, nextId: s.nextId + 1, good: { id: `g${s.nextId}`, at, pos: s.target?.pos ?? null } };
+    case 'bothSides':
+      return { ...s, bothSides: action.on };
   }
 }
 
@@ -113,6 +119,8 @@ export function sanitizeAction(raw: unknown, from: Role): Action | null {
     }
     case 'good':
       return from === 'A' ? { type: 'good' } : null;
+    case 'bothSides':
+      return from === 'A' && typeof raw.on === 'boolean' ? { type: 'bothSides', on: raw.on } : null;
     default:
       return null;
   }

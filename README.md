@@ -8,7 +8,7 @@ The **receiver** lies face down with their phone beside them and moves a finger 
 
 | Pair | Receiver | Giver |
 | :-: | :-: | :-: |
-| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, leaning the way of the last nudge, and the nudge in words"> |
+| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, pointing the way of the nudge"> |
 
 ## How it works
 
@@ -19,7 +19,8 @@ The **receiver** lies face down with their phone beside them and moves a finger 
      - *Nudge*: drag anywhere, like on a trackpad. Slow drags are precise, quick ones travel far.
      - *Map*: touch the spot on the picture.
      - **Double-tap anywhere = right there.**
-   - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the spot as a palm-sized glow: roughly where the hands should be, not an exact point. Each nudge makes it lean and point that way, pings once and shows in words ("↗ Higher and to their right"), fading as it gets older, so a fresh nudge stands out from an old one. Optional spoken cues also name the area. *I'm here* moves the spot to where the hands really are.
+     - **Two-finger tap = both sides:** the spot and its mirror across the spine, one hand each. Tap again for one side.
+   - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the spot as a palm-sized glow: roughly where the hands should be, not an exact point. A nudge pings as it starts and pulls the glow into a drop pointing its way, longer for bigger nudges; a second after the finger lifts it's a plain glow again, so what points is always fresh. Optional spoken cues say it in words ("higher and to their right", the area's name). *I'm here* moves the spot to where the hands really are.
 
 - **Map mode learns.** After a double-tap on a spot touched in map mode, the giver taps *I'm here — teach map* and then taps where their hands are. The receiver's phone saves the pair and uses it to correct later touches.
 - **Swap roles:** *⋯ → Swap roles* keeps the same connection.

@@ -32,8 +32,8 @@ try {
   await giver.getByRole('radio', { name: /At their feet/ }).click();
   await setupSwipes(receiver, (p, a, b) => touchDrag(p, a, b, 500));
   await touchDrag(receiver, { x: 190, y: 430 }, { x: 250, y: 330 }, 900);
-  await giver.waitForSelector('.nudge-chip');
-  await sleep(400);
+  await giver.waitForSelector('.map-heading');
+  await sleep(150);
   await save(giver, 'giver');
   await sleep(1600); // the receiver's "Got it" toast fades
   await save(receiver, 'receiver');

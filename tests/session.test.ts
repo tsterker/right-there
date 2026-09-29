@@ -33,6 +33,18 @@ describe('reducer', () => {
     expect(run(steps)).toEqual(s);
     expect(run([[{ type: 'good' }, 'A', 1]]).good?.pos).toBeNull();
   });
+
+  it('switches both sides on and off without touching the spot', () => {
+    const at = { x: 6, y: 20 };
+    const on = run([
+      [{ type: 'target', pos: at, active: false, source: 'nudge' }, 'A', 1],
+      [{ type: 'bothSides', on: true }, 'A', 2],
+    ]);
+    expect(initialState('1234', 0).bothSides).toBe(false);
+    expect(on.bothSides).toBe(true);
+    expect(on.target?.pos).toEqual(at);
+    expect(reduce(on, { type: 'bothSides', on: false }, { from: 'A', at: 3 }).bothSides).toBe(false);
+  });
 });
 
 describe('sanitizeAction', () => {
@@ -44,6 +56,9 @@ describe('sanitizeAction', () => {
     expect(sanitizeAction({ type: 'target', pos: { x: 0, y: 0 }, source: 'anchor', learn: true }, 'B')).toMatchObject({ learn: true });
     expect(sanitizeAction({ type: 'good' }, 'A')).toEqual({ type: 'good' });
     expect(sanitizeAction({ type: 'good' }, 'B')).toBeNull();
+    expect(sanitizeAction({ type: 'bothSides', on: true, extra: 1 }, 'A')).toEqual({ type: 'bothSides', on: true });
+    expect(sanitizeAction({ type: 'bothSides', on: 'yes' }, 'A')).toBeNull();
+    expect(sanitizeAction({ type: 'bothSides', on: true }, 'B')).toBeNull();
     expect(sanitizeAction({ type: 'presence', role: 'A', connected: true }, 'A')).toBeNull();
   });
 

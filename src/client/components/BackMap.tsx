@@ -1,14 +1,13 @@
 /**
  * The back map. Anatomy is drawn in body space (cm) inside one transformed
  * group, so the whole figure can be rotated/mirrored to match how a phone
- * lies (receiver) or where the giver stands. The dot and the side labels
+ * lies (receiver) or where the giver stands. The spot and the side labels
  * are placed in view space so labels stay upright.
  */
 import { memo, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, type Ref } from 'react';
 import {
   DRAW_BOUNDS,
   HEAD,
-  isOnBody,
   LEFT_ARM,
   LEFT_ILIAC_CREST,
   LEFT_RIBS,
@@ -19,12 +18,11 @@ import {
   RIGHT_RIBS,
   RIGHT_SCAPULA,
   RIGHT_SCAPULA_SPINE,
-  SACRUM,
+  SACRAL_DIMPLES,
   TORSO_OUTLINE,
   VERTEBRAE,
 } from '../../shared/body';
-import { apply, MIRROR_X, mul, rotation, smoothPath, transpose, type Mat2, type Vec } from '../../shared/geometry';
-import { classify, type RegionId } from '../../shared/regions';
+import { apply, len, MIRROR_X, mul, rotation, smoothPath, sub, transpose, type Mat2, type Vec } from '../../shared/geometry';
 
 export interface MapHandle {
   /** Client (CSS px) → body cm. */
@@ -38,8 +36,8 @@ export interface BackMapProps {
   /** Glide the dot toward new positions instead of jumping (network jitter). */
   smooth?: boolean;
   trail?: Vec[];
-  arrow?: { from: Vec; to: Vec } | null;
-  highlight?: RegionId | null;
+  /** The latest nudge: the spot points its way. `id` changes per stroke and on release, replaying the cue. */
+  heading?: { from: Vec; to: Vec; id: string; live: boolean } | null;
   dim?: boolean;
   /** 'torso' trims the top of the head and the arms' edges, so the back is drawn bigger. */
   crop?: 'full' | 'torso';
@@ -70,24 +68,6 @@ function viewBoxFor(m: Mat2, crop: 'full' | 'torso'): string {
   return `${f2(x0)} ${f2(y0)} ${f2(Math.max(...xs) + pad - x0)} ${f2(Math.max(...ys) + pad - y0)}`;
 }
 
-// Region shapes for highlighting: union of small cells, computed once.
-const CELL = 1.5;
-let regionPaths: Map<RegionId, string> | null = null;
-function regionPath(id: RegionId): string {
-  if (!regionPaths) {
-    regionPaths = new Map();
-    for (let y = -12; y < 64; y += CELL) {
-      for (let x = -24; x < 24; x += CELL) {
-        const c = { x: x + CELL / 2, y: y + CELL / 2 };
-        if (!isOnBody(c)) continue;
-        const r = classify(c);
-        regionPaths.set(r, `${regionPaths.get(r) ?? ''}M${f2(x)} ${f2(y)}h${CELL}v${CELL}h-${CELL}Z`);
-      }
-    }
-  }
-  return regionPaths.get(id) ?? '';
-}
-
 const TORSO_D = smoothPath(TORSO_OUTLINE, true, 0.9);
 const ARM_DS = [smoothPath(LEFT_ARM, true, 0.8), smoothPath(RIGHT_ARM, true, 0.8)];
 
@@ -103,17 +83,19 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
           <stop offset="0%" className="map-arm-a" />
           <stop offset="100%" className="map-arm-b" />
         </linearGradient>
-        <clipPath id={`${uid}-torso`}>
-          <path d={TORSO_D} />
-        </clipPath>
-        <filter id={`${uid}-soft`} x="-10%" y="-10%" width="120%" height="120%">
-          <feGaussianBlur stdDeviation="0.9" />
-        </filter>
+        {/* The hips fade out like the arms, instead of closing into a bottom. */}
+        <linearGradient id={`${uid}-hips`} gradientUnits="userSpaceOnUse" x1="0" y1="50" x2="0" y2="65">
+          <stop offset="0%" stopColor="#fff" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        <mask id={`${uid}-fade`} maskUnits="userSpaceOnUse" x="-40" y="-40" width="80" height="120">
+          <rect x="-40" y="-40" width="80" height="120" fill={`url(#${uid}-hips)`} />
+        </mask>
       </defs>
       {ARM_DS.map((d, i) => (
         <path key={i} d={d} className="map-arm" fill={`url(#${uid}-arm)`} />
       ))}
-      <path d={TORSO_D} className="map-torso" fill={`url(#${uid}-skin)`} />
+      <path d={TORSO_D} className="map-torso" fill={`url(#${uid}-skin)`} mask={`url(#${uid}-fade)`} />
       <ellipse cx={HEAD.cx} cy={HEAD.cy} rx={HEAD.rx} ry={HEAD.ry} className="map-head" />
       <g className="map-anatomy">
         {[...LEFT_RIBS, ...RIGHT_RIBS].map((arc, i) => (
@@ -126,9 +108,11 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
           <path key={`ss${i}`} d={smoothPath(s, false)} className="map-ridge" />
         ))}
         {[LEFT_ILIAC_CREST, RIGHT_ILIAC_CREST].map((s, i) => (
-          <path key={`il${i}`} d={smoothPath(s, false)} className="map-ridge" />
+          <path key={`il${i}`} d={smoothPath(s, false)} className="map-crest" />
         ))}
-        <path d={smoothPath(SACRUM, true, 0.7)} className="map-bone" />
+        {SACRAL_DIMPLES.map((d, i) => (
+          <circle key={`sd${i}`} cx={d.x} cy={d.y} r={0.8} className="map-dimple" />
+        ))}
         <line x1={0} y1={-10.5} x2={0} y2={47.5} className="map-spine-line" />
         {VERTEBRAE.map((v) => (
           <rect
@@ -146,7 +130,21 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
   );
 });
 
-function Dot({ target, smooth, m }: { target: { pos: Vec; active: boolean }; smooth: boolean; m: Mat2 }) {
+interface SpotProps {
+  target: { pos: Vec; active: boolean };
+  smooth: boolean;
+  m: Mat2;
+  /** View-space direction of the latest nudge. */
+  heading: { dir: Vec; id: string; live: boolean } | null;
+  uid: string;
+}
+
+/**
+ * The spot: a soft cloud about the size of a palm, because it is where the
+ * hands roughly are, not a point. After a nudge it leans the nudge's way,
+ * chevrons march ahead of it and a ring pings once, so a glance catches it.
+ */
+function Spot({ target, smooth, m, heading, uid }: SpotProps) {
   const ref = useRef<SVGGElement>(null);
   const cur = useRef<Vec | null>(null);
   const { x, y } = apply(m, target.pos);
@@ -173,16 +171,28 @@ function Dot({ target, smooth, m }: { target: { pos: Vec; active: boolean }; smo
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [x, y, smooth]);
+  const deg = heading ? f2((Math.atan2(heading.dir.y, heading.dir.x) * 180) / Math.PI) : 0;
   return (
     <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      <circle r={4.6} className="map-dot-halo" />
-      <circle r={2.1} className="map-dot-core" />
+      <g transform={`rotate(${deg})`}>
+        {/* Leaning the nudge's way: the hands are somewhere along that line. */}
+        <ellipse rx={heading ? 8.4 : 6.4} ry={heading ? 5.2 : 6.4} cx={heading ? 1.6 : 0} className="map-cloud" fill={`url(#${uid}-cloud)`} />
+        {heading && (
+          <g key={heading.id} className={heading.live ? 'map-heading is-live' : 'map-heading'}>
+            {!heading.live && <circle r={6.4} className="map-ping" />}
+            {[10, 13.5].map((cx, i) => (
+              <path key={cx} d={`M${cx - 1.6} -2.6 L${cx + 0.8} 0 L${cx - 1.6} 2.6`} className="map-chevron" style={{ animationDelay: `${i * 0.18}s` }} />
+            ))}
+          </g>
+        )}
+      </g>
+      <circle r={1.1} className="map-dot-core" />
     </g>
   );
 }
 
 export function BackMap(props: BackMapProps) {
-  const { angle = 0, mirrored = false, target, smooth = false, trail, arrow, highlight, dim, crop = 'full', handle } = props;
+  const { angle = 0, mirrored = false, target, smooth = false, trail, heading, dim, crop = 'full', handle } = props;
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const m = useMemo(() => viewMatrix(angle, mirrored), [angle, mirrored]);
   const inv = useMemo(() => transpose(m), [m]);
@@ -201,6 +211,9 @@ export function BackMap(props: BackMapProps) {
     [inv],
   );
 
+  const dir = heading ? apply(m, sub(heading.to, heading.from)) : null;
+  const spotHeading = heading && dir && len(dir) > 0.5 ? { dir, id: heading.id, live: heading.live } : null;
+
   const labelY = crop === 'torso' ? -5 : -7;
   const labels = [
     { t: 'L', p: apply(m, { x: -24.5, y: labelY }) },
@@ -217,33 +230,20 @@ export function BackMap(props: BackMapProps) {
       aria-label="Map of the back"
     >
       <defs>
-        <marker id={`${uid}-arrow`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-          <path d="M0 0 L10 5 L0 10 z" className="map-arrow-head" />
-        </marker>
+        <radialGradient id={`${uid}-cloud`}>
+          <stop offset="0%" className="map-cloud-a" />
+          <stop offset="45%" className="map-cloud-b" />
+          <stop offset="100%" className="map-cloud-c" />
+        </radialGradient>
       </defs>
       <g transform={`matrix(${m[0]} ${m[2]} ${m[1]} ${m[3]} 0 0)`}>
         <Anatomy uid={uid} />
-        {highlight && (
-          <g clipPath={`url(#${uid}-torso)`}>
-            <path d={regionPath(highlight)} className="map-highlight" filter={`url(#${uid}-soft)`} />
-          </g>
-        )}
         {trail && trail.length > 1 && (
           <polyline points={trail.map((p) => `${f2(p.x)},${f2(p.y)}`).join(' ')} className="map-trail" />
         )}
-        {arrow && (
-          <line
-            x1={arrow.from.x}
-            y1={arrow.from.y}
-            x2={arrow.to.x}
-            y2={arrow.to.y}
-            className="map-arrow"
-            markerEnd={`url(#${uid}-arrow)`}
-          />
-        )}
       </g>
       <g className="map-view">
-        {target && <Dot target={target} smooth={smooth} m={m} />}
+        {target && <Spot target={target} smooth={smooth} m={m} heading={spotHeading} uid={uid} />}
         {labels.map((l) => (
           <g key={l.t} transform={`translate(${f2(l.p.x)} ${f2(l.p.y)})`} className="map-side-label">
             <circle r={2.6} />

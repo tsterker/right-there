@@ -112,10 +112,10 @@ try {
   console.log('2. Phone: two swipes, then nudge');
   await setupSwipes(iphone, (p, a, b) => touchDrag(p, a, b, 500));
   check((await iphone.locator('.toast').innerText()).includes('toward your head'), 'swipes understood: phone top toward the head');
-  check((await mac.locator('.region-name').innerText()) === 'No spot yet', 'Mac waits for the first pointing');
+  check((await mac.locator('.region-name').textContent()) === 'No spot yet', 'Mac waits for the first pointing');
   await touchDrag(iphone, { x: 190, y: 420 }, { x: 250, y: 330 }, 900);
   await mac.waitForSelector('.nudge-chip', { timeout: 5000 });
-  const region = await mac.locator('.region-name').innerText();
+  const region = await mac.locator('.region-name').textContent();
   check(region !== 'No spot yet', `Mac follows the nudge: "${region}", "${(await mac.locator('.nudge-chip').innerText()).trim()}"`);
   await shot(mac, 'mac-live-nudge');
   await shot(iphone, 'phone-pad-nudge');
@@ -124,7 +124,7 @@ try {
   const pad = await iphone.locator('.touchpad').boundingBox();
   await touchTaps(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 }, 2);
   await mac.waitForSelector('.banner-good', { timeout: 5000 });
-  check((await mac.locator('.region-name').innerText()) === region, 'Mac shows "♥ Right there"; the double-tap did not move the spot');
+  check((await mac.locator('.region-name').textContent()) === region, 'Mac shows "♥ Right there"; the double-tap did not move the spot');
   await shot(mac, 'mac-right-there');
 
   console.log('4. Map mode: touch a spot, ♥, giver confirms where the hands are → the map learns');
@@ -161,7 +161,7 @@ try {
   await pair(mac, iphone, GUEST, '.sheet');
   await iphone.waitForSelector('.giver-live', { timeout: 20000 });
   await sleep(300);
-  const after = await iphone.locator('.region-name').innerText();
+  const after = await iphone.locator('.region-name').textContent();
   check(after !== 'No spot yet' && (await iphone.locator('.first-view').count()) === 0, `phone is back and sees the spot set meanwhile ("${after}")`);
   await shot(iphone, 'phone-giver-rotated');
 

@@ -2,13 +2,13 @@
 
 Show your partner where to massage, without saying a word.
 
-The **receiver** lies face down with their phone beside them and moves a finger to show where they want the hands. The **giver** sees the spot as a dot on a map of the back. Double-tap when it's *right there*.
+The **receiver** lies face down with their phone beside them and moves a finger to show where they want the hands. The **giver** sees the spot as a glow on a map of the back. Double-tap when it's *right there*.
 
 **Start at https://tsterker.github.io/right-there/** on the giver's screen; a laptop is perfect. *Try the demo* there shows both screens side by side, already connected. Prototype. There's no server: the two devices talk to each other directly over the Wi-Fi.
 
 | Pair | Receiver | Giver |
 | :-: | :-: | :-: |
-| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, the nudge direction and the area name"> |
+| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, leaning the way of the last nudge, and the nudge in words"> |
 
 ## How it works
 
@@ -19,7 +19,7 @@ The **receiver** lies face down with their phone beside them and moves a finger 
      - *Nudge*: drag anywhere, like on a trackpad. Slow drags are precise, quick ones travel far.
      - *Map*: touch the spot on the picture.
      - **Double-tap anywhere = right there.**
-   - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the dot, the direction of each nudge ("↗ Higher and to their right") and the name of the area, with optional spoken cues. *I'm here* moves the dot to where the hands really are.
+   - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the spot as a palm-sized glow: roughly where the hands should be, not an exact point. Each nudge makes it lean and point that way, pings once and shows in words ("↗ Higher and to their right"), fading as it gets older, so a fresh nudge stands out from an old one. Optional spoken cues also name the area. *I'm here* moves the spot to where the hands really are.
 
 - **Map mode learns.** After a double-tap on a spot touched in map mode, the giver taps *I'm here — teach map* and then taps where their hands are. The receiver's phone saves the pair and uses it to correct later touches.
 - **Swap roles:** *⋯ → Swap roles* keeps the same connection.

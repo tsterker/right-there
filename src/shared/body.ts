@@ -92,12 +92,10 @@ export const RIGHT_ILIAC_CREST: Vec[] = [
 ];
 export const LEFT_ILIAC_CREST = RIGHT_ILIAC_CREST.map(mirror);
 
-export const SACRUM: Vec[] = [
-  { x: -5.2, y: 48.8 },
-  { x: 5.2, y: 48.8 },
-  { x: 3.4, y: 55.6 },
-  { x: 0, y: 61 },
-  { x: -3.4, y: 55.6 },
+/** The two dimples over the sacroiliac joints, where the lower back meets the pelvis. */
+export const SACRAL_DIMPLES: Vec[] = [
+  { x: -4.4, y: 50.5 },
+  { x: 4.4, y: 50.5 },
 ];
 
 /** Lower rib arcs (right side), a faint hint of the rib cage above the kidneys. */

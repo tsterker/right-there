@@ -1,6 +1,7 @@
 /**
- * The giver's screen: where the hands should be. Glanceable (big dot, big
- * words), hands-free (spoken cues), touchable with a knuckle (two buttons).
+ * The giver's screen: where the hands should be. Glanceable (the map fills
+ * the screen, each nudge replays a cue), hands-free (spoken cues), touchable
+ * with a knuckle (one big button).
  */
 import { useMemo, useRef, useState } from 'react';
 import { apply, sub } from '../../../shared/geometry';
@@ -18,6 +19,8 @@ import { useNow } from '../../lib/time';
 import { useTrail } from '../../lib/trail';
 import { ViewpointPicker, VoiceToggle } from './common';
 
+const NUDGE_MS = 8000;
+
 export function GiverLive() {
   const { state, dispatch, now, conn } = useSession();
   const [settings] = useGiverSettings();
@@ -30,7 +33,11 @@ export function GiverLive() {
   const trail = useTrail(target);
   const m = useMemo(() => viewMatrix(settings.viewAngle), [settings.viewAngle]);
 
-  const nudge = target?.source === 'nudge' && target.from && (target.active || t - target.at < 6000) ? { from: target.from, to: target.pos } : null;
+  // A nudge shows while the finger moves and for a while after, fading, so a fresh one looks fresh.
+  const nudge =
+    target?.source === 'nudge' && target.from && (target.active || t - target.at < NUDGE_MS)
+      ? { from: target.from, to: target.pos, id: `${target.from.x},${target.from.y},${target.active}`, live: target.active }
+      : null;
   const nudgeText = nudge ? describeNudge(sub(nudge.to, nudge.from)) : null;
   const region = target ? classify(target.pos) : null;
   const good = state.good && t - state.good.at < 4000 ? state.good : null;
@@ -68,23 +75,20 @@ export function GiverLive() {
 
       <div className="live-body">
         <div className={`live-map${anchoring ? ' is-picking' : ''}`} onPointerUp={onMap}>
-            <BackMap angle={settings.viewAngle} crop="torso" handle={mapRef} target={target} smooth trail={trail} arrow={nudge} highlight={region} />
+          <BackMap angle={settings.viewAngle} crop="torso" handle={mapRef} target={target} smooth trail={trail} heading={nudge} />
           {!target && <div className="map-overlay-hint soft">Waiting for them to point…</div>}
           {anchoring && <div className="map-overlay-hint">Tap where your hands are now</div>}
-          {nudgeText && nudge && (
-            <div className="nudge-chip">
+          {nudgeText && nudge && !anchoring && (
+            <div key={nudge.id} className={`nudge-chip${nudge.live ? ' is-live' : ''}`}>
               <span className="nudge-arrow">{arrowFor(apply(m, sub(nudge.to, nudge.from)))}</span> {nudgeText}
             </div>
           )}
           <Toast id={toast?.id ?? null}>{toast?.text}</Toast>
         </div>
-
-        <div className="live-panel">
-          <h2 className="region-name">{region ? regionName(region) : 'No spot yet'}</h2>
-          <p className="region-meta">
-            {!target ? 'The dot appears when they move a finger.' : target.active ? 'They’re pointing…' : 'Settled — work here'}
-          </p>
-        </div>
+        {/* The map shows the area; its name is for screen readers (and spoken cues). */}
+        <p className="region-name sr-only" aria-live="polite">
+          {region ? regionName(region) : 'No spot yet'}
+        </p>
       </div>
 
       <nav className="giver-actions">

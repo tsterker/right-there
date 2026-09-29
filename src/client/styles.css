@@ -337,6 +337,16 @@ label.slider input {
   pointer-events: none;
 }
 
+/* Read by screen readers, not shown. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ---------- the map ---------- */
 
 .map {
@@ -402,10 +412,6 @@ label.slider input {
 .map-c7 {
   fill: #6d778c;
 }
-.map-highlight {
-  fill: var(--accent);
-  opacity: 0.12;
-}
 .map-trail {
   fill: none;
   stroke: var(--accent);
@@ -414,29 +420,62 @@ label.slider input {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.map-arrow {
-  stroke: var(--accent-2);
-  stroke-width: 0.6;
-  stroke-dasharray: 1.2 0.8;
+.map-crest {
+  fill: none;
+  stroke: #465062;
+  stroke-width: 0.3;
+  stroke-linecap: round;
 }
-.map-arrow-head {
-  fill: var(--accent-2);
+.map-dimple {
+  fill: #465062;
 }
-.map-dot-core {
-  fill: var(--accent);
-  stroke: #1b0f0a;
-  stroke-width: 0.35;
+.map-cloud-a {
+  stop-color: var(--accent);
+  stop-opacity: 0.6;
 }
-.map-dot-halo {
-  fill: var(--accent);
-  opacity: 0.22;
+.map-cloud-b {
+  stop-color: var(--accent);
+  stop-opacity: 0.3;
+}
+.map-cloud-c {
+  stop-color: var(--accent);
+  stop-opacity: 0;
+}
+.map-cloud {
   transform-box: fill-box;
   transform-origin: center;
-  animation: halo 1.8s ease-in-out infinite;
+  animation: breathe 2.4s ease-in-out infinite;
 }
-.map-dot.is-active .map-dot-halo {
-  opacity: 0.38;
-  animation-duration: 0.7s;
+.map-dot.is-active .map-cloud {
+  animation-duration: 0.8s;
+}
+.map-dot-core {
+  fill: #ffd9c7;
+  opacity: 0.9;
+}
+.map-chevron {
+  fill: none;
+  stroke: var(--accent-2);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: chevron 0.9s ease-out infinite both;
+}
+/* A settled nudge marches a few times, then stays as a faint pointer until it expires. */
+.map-heading {
+  animation: heading-age 8s forwards;
+}
+.map-heading:not(.is-live) .map-chevron {
+  animation-iteration-count: 4;
+  animation-fill-mode: backwards;
+}
+.map-ping {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ping 0.9s ease-out 2 both;
 }
 .map-side-label circle {
   fill: var(--surface-2);
@@ -806,11 +845,12 @@ label.slider input {
 .giver-live .live-body {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
 }
 .live-map {
   position: relative;
+  flex: 1;
   min-height: 0;
   padding: 6px;
 }
@@ -818,25 +858,6 @@ label.slider input {
   outline: 3px dashed var(--teal);
   outline-offset: -6px;
   cursor: crosshair;
-}
-.live-panel {
-  padding: 10px 14px 12px;
-  overflow-y: auto;
-  max-height: 38dvh;
-  border-top: 1px solid var(--line);
-  background: var(--bg-2);
-}
-.region-name {
-  font-size: 23px;
-  line-height: 1.15;
-  font-weight: 800;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-.region-meta {
-  color: var(--muted);
-  margin: 2px 0 8px;
-  font-size: 14px;
 }
 .giver-actions .act {
   min-height: 64px;
@@ -876,19 +897,26 @@ label.slider input {
 }
 .nudge-chip {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  background: rgba(20, 25, 34, 0.9);
-  border: 1px solid var(--line);
-  padding: 6px 14px;
+  bottom: 12px;
+  left: 50%;
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: rgba(20, 25, 34, 0.92);
+  border: 1px solid var(--accent);
+  padding: 8px 18px;
   border-radius: 999px;
   font-weight: 750;
-  font-size: 16px;
+  font-size: 18px;
   pointer-events: none;
+  animation: nudge-age 8s forwards;
+}
+.nudge-chip.is-live {
+  animation: nudge-in 0.25s both;
 }
 .nudge-arrow {
   color: var(--accent);
-  font-size: 20px;
+  font-size: 22px;
 }
 
 /* ---------- demo ---------- */
@@ -945,28 +973,6 @@ label.slider input {
 
 /* ---------- landscape giver (phone propped sideways, tablets) ---------- */
 
-@media (orientation: landscape) and (min-width: 700px) {
-  .giver-live .live-body {
-    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .giver-live .live-panel {
-    max-height: none;
-    border-top: none;
-    border-left: 1px solid var(--line);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 24px;
-  }
-  .giver-live .region-name {
-    font-size: 34px;
-  }
-  .giver-live .region-meta {
-    font-size: 17px;
-  }
-}
-
 @media (orientation: landscape) and (max-height: 520px) {
   .banner {
     left: auto;
@@ -996,15 +1002,6 @@ label.slider input {
 
 /* ---------- motion ---------- */
 
-@keyframes halo {
-  0%,
-  100% {
-    transform: scale(0.85);
-  }
-  50% {
-    transform: scale(1.15);
-  }
-}
 @keyframes blink {
   0%,
   100% {
@@ -1031,6 +1028,72 @@ label.slider input {
   }
   100% {
     opacity: 0;
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(0.94);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@keyframes chevron {
+  0% {
+    opacity: 0;
+    transform: translateX(-1.5px);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(2.5px);
+  }
+}
+@keyframes ping {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+@keyframes heading-age {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.35;
+  }
+}
+@keyframes nudge-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+}
+@keyframes nudge-age {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+  3% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.08);
+  }
+  7%,
+  60% {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  100% {
+    opacity: 0.25;
+    transform: translateX(-50%);
   }
 }
 @keyframes banner {
@@ -1065,12 +1128,17 @@ label.slider input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-dot-halo,
+  .map-cloud,
+  .map-chevron,
+  .nudge-chip,
   .pulse,
   .conn.is-reconnecting,
   .act-teach,
   .spinner {
     animation: none;
+  }
+  .map-ping {
+    display: none;
   }
 }
 

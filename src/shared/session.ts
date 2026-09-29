@@ -56,7 +56,8 @@ export type Action =
       learn?: boolean;
     }
   | { type: 'good' }
-  | { type: 'bothSides'; on: boolean };
+  /** `side`: steer that hand from now on (a stroke started on that half of the back). */
+  | { type: 'bothSides'; on: boolean; side?: Side };
 
 export type ActionType = Action['type'];
 
@@ -105,8 +106,14 @@ export function reduce(s: SessionState, action: Action, meta: Meta): SessionStat
     }
     case 'good':
       return { ...s, nextId: s.nextId + 1, good: { id: `g${s.nextId}`, at, pos: s.target?.pos ?? null } };
-    case 'bothSides':
-      return { ...s, bothSides: action.on ? sideOf(s.target?.pos.x ?? 0, 'right') : null };
+    case 'bothSides': {
+      if (!action.on) return { ...s, bothSides: null };
+      if (!action.side) return { ...s, bothSides: sideOf(s.target?.pos.x ?? 0, 'right') };
+      // Switching hands: the spot becomes its mirror, so the pair stays where it is.
+      const t = s.target;
+      const flip = t && t.pos.x !== 0 && sideOf(t.pos.x, action.side) !== action.side;
+      return { ...s, bothSides: action.side, target: flip ? { ...t, pos: { x: -t.pos.x, y: t.pos.y } } : t };
+    }
   }
 }
 
@@ -139,8 +146,12 @@ export function sanitizeAction(raw: unknown, from: Role): Action | null {
     }
     case 'good':
       return from === 'A' ? { type: 'good' } : null;
-    case 'bothSides':
-      return from === 'A' && typeof raw.on === 'boolean' ? { type: 'bothSides', on: raw.on } : null;
+    case 'bothSides': {
+      if (from !== 'A' || typeof raw.on !== 'boolean') return null;
+      const action: Action = { type: 'bothSides', on: raw.on };
+      if (raw.side === 'left' || raw.side === 'right') action.side = raw.side;
+      return action;
+    }
     default:
       return null;
   }

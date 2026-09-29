@@ -130,6 +130,14 @@ try {
   await mac.waitForSelector('.map-mode-chip', { timeout: 5000 });
   check((await iphone.locator('.toast').innerText()).includes('Both sides'), 'two-finger tap: both sides on the phone and the Mac');
   await shot(mac, 'mac-both-sides');
+  // The spot is right of the spine. A stroke starting on the left half, moving left, spreads the hands.
+  const spread = () => mac.evaluate(() => Math.max(0, ...[...document.querySelectorAll('.map-dot-core')].map((c) => Math.abs(Number(c.getAttribute('cx') ?? 0)))));
+  const w0 = await spread();
+  const [a, b] = [await onMap(iphone, '.touchpad', -9, 22), await onMap(iphone, '.touchpad', -15, 22)];
+  await touchDrag(iphone, a, b, 500);
+  await sleep(500);
+  const w1 = await spread();
+  check(w1 > w0 + 1, `a stroke started on the left half steers the left hand: apart (${w0.toFixed(1)} → ${w1.toFixed(1)} cm)`);
   await touchTwoFingerTap(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 });
   await mac.waitForSelector('.map-mode-chip', { state: 'detached', timeout: 5000 });
   check(true, 'another two-finger tap: back to one side');

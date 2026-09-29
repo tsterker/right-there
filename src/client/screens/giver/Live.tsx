@@ -152,7 +152,7 @@ function useGiverVoice(voice: boolean) {
       }
       return;
     }
-    if (a.type === 'bothSides') {
+    if (a.type === 'bothSides' && !a.side) {
       lastRegion.current = null;
       say(a.on ? 'Both sides' : 'One side', 'normal');
       return;

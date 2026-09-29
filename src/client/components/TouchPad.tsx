@@ -40,6 +40,8 @@ type Gesture =
       before: Vec | null;
       /** Sent at least one active target during this gesture. */
       sent: boolean;
+      /** Working both sides: the hand this stroke steers (from where it started). */
+      side: Side | null;
     }
   /** More than one finger: no pointing. A quick two-finger tap toggles both sides. */
   | { kind: 'multi'; startT: number; fingers: number; moved: boolean; starts: Map<number, Vec> };
@@ -169,11 +171,23 @@ export function TouchPad(props: TouchPadProps) {
         from: posRef.current,
         before: p.current.target?.pos ?? null,
         sent: false,
+        side: p.current.bothSides ?? null,
       };
       gesture.current = g;
       setActive(true);
       if (p.current.mode === 'nudge') {
         nudger.current.begin({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+        // Both sides: starting on the other half of the back steers that hand (the pair stays put).
+        const touched = g.side && mapRef.current?.toBody(e.clientX, e.clientY);
+        if (g.side && touched && Math.abs(touched.x) > 2) {
+          const side: Side = touched.x < 0 ? 'left' : 'right';
+          if (side !== g.side) {
+            g.side = side;
+            g.from = { x: -posRef.current.x, y: posRef.current.y };
+            place(g.from);
+            p.current.dispatch({ type: 'bothSides', on: true, side });
+          }
+        }
       } else {
         const b = bodyAt(e);
         if (b) {
@@ -226,8 +240,7 @@ export function TouchPad(props: TouchPadProps) {
       if (!g.moved) return;
       const d = nudger.current.move({ x: e.clientX, y: e.clientY, t: e.timeStamp });
       if (d.x === 0 && d.y === 0) return;
-      const side = p.current.bothSides;
-      const next = side ? keepSide(clampToBody(add(posRef.current, d)), side) : clampToBody(add(posRef.current, d));
+      const next = g.side ? keepSide(clampToBody(add(posRef.current, d)), g.side) : clampToBody(add(posRef.current, d));
       setLocal(next);
       emit(next, true, g.from);
       g.sent = true;

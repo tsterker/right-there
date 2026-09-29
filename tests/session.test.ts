@@ -51,6 +51,20 @@ describe('reducer', () => {
     expect(reduce(on, { type: 'bothSides', on: false }, { from: 'A', at: 4 }).bothSides).toBeNull();
     expect(run([[{ type: 'bothSides', on: true }, 'A', 1]]).bothSides).toBe('right');
   });
+
+  it('switches hands without moving the pair: the spot becomes its mirror', () => {
+    const on = run([
+      [{ type: 'target', pos: { x: -6, y: 20 }, active: false, source: 'nudge' }, 'A', 1],
+      [{ type: 'bothSides', on: true }, 'A', 2],
+      [{ type: 'bothSides', on: true, side: 'right' }, 'A', 3],
+    ]);
+    expect(on.bothSides).toBe('right');
+    expect(on.target?.pos).toEqual({ x: 6, y: 20 });
+    // Now nudges steer the right hand: going left stops at the spine.
+    const left = reduce(on, { type: 'target', pos: { x: -3, y: 20 }, active: true, source: 'nudge' }, { from: 'A', at: 4 });
+    expect(left.target?.pos.x).toBe(0);
+    expect(reduce(on, { type: 'bothSides', on: true, side: 'right' }, { from: 'A', at: 4 }).target?.pos).toEqual({ x: 6, y: 20 });
+  });
 });
 
 describe('sanitizeAction', () => {
@@ -64,6 +78,8 @@ describe('sanitizeAction', () => {
     expect(sanitizeAction({ type: 'good' }, 'B')).toBeNull();
     expect(sanitizeAction({ type: 'bothSides', on: true, extra: 1 }, 'A')).toEqual({ type: 'bothSides', on: true });
     expect(sanitizeAction({ type: 'bothSides', on: 'yes' }, 'A')).toBeNull();
+    expect(sanitizeAction({ type: 'bothSides', on: true, side: 'left' }, 'A')).toEqual({ type: 'bothSides', on: true, side: 'left' });
+    expect(sanitizeAction({ type: 'bothSides', on: true, side: 'up' }, 'A')).toEqual({ type: 'bothSides', on: true });
     expect(sanitizeAction({ type: 'bothSides', on: true }, 'B')).toBeNull();
     expect(sanitizeAction({ type: 'presence', role: 'A', connected: true }, 'A')).toBeNull();
   });

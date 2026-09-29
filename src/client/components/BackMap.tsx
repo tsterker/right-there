@@ -4,7 +4,7 @@
  * lies (receiver) or where the giver stands. The spot and the side labels
  * are placed in view space so labels stay upright.
  */
-import { memo, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, type Ref } from 'react';
+import { memo, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
   DRAW_BOUNDS,
   HEAD,
@@ -133,6 +133,8 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
 });
 
 const SPOT_R = 6.4;
+/** A soft arrowhead pointing along +x. */
+const CHEVRON = 'M-2.4 -3.6 L0.6 0 L-2.4 3.6';
 
 interface SpotProps {
   target: { pos: Vec; active: boolean };
@@ -141,8 +143,6 @@ interface SpotProps {
   /** Where the current nudge is going, in view space (cm). */
   heading: { d: Vec; id: string; live: boolean } | null;
   uid: string;
-  /** Radius (cm). */
-  r?: number;
 }
 
 /**
@@ -152,7 +152,7 @@ interface SpotProps {
  * arrowhead, and pings once as the stroke starts. When the finger lifts, it
  * eases back into a round cloud.
  */
-function Spot({ target, smooth, m, heading, uid, r = SPOT_R }: SpotProps) {
+function Spot({ target, smooth, m, heading, uid }: SpotProps) {
   const ref = useRef<SVGGElement>(null);
   const cur = useRef<Vec | null>(null);
   const { x, y } = apply(m, target.pos);
@@ -188,24 +188,113 @@ function Spot({ target, smooth, m, heading, uid, r = SPOT_R }: SpotProps) {
   return (
     <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
       <g transform={`rotate(${deg})`}>
-        {heading && heading.id !== unpinged.current && <circle key={heading.id} r={r} className="map-ping" />}
+        {heading && heading.id !== unpinged.current && <circle key={heading.id} r={SPOT_R} className="map-ping" />}
         <g className="map-cloud">
           <ellipse
-            rx={r}
-            ry={r}
+            rx={SPOT_R}
+            ry={SPOT_R}
             className={`map-smudge${live ? ' is-live' : ''}`}
             fill={`url(#${uid}-cloud)`}
-            style={{ transform: `translateX(${f2((k - 1) * r)}px) scaleX(${f2(k)})` }}
+            style={{ transform: `translateX(${f2((k - 1) * SPOT_R)}px) scaleX(${f2(k)})` }}
           />
         </g>
         <path
-          d="M-2.4 -3.6 L0.6 0 L-2.4 3.6"
+          d={CHEVRON}
           className={`map-smudge-tip${live ? ' is-live' : ''}`}
           filter={`url(#${uid}-blur)`}
-          style={{ transform: `translateX(${f2((2 * k - 1) * r - 1.2)}px)` }}
+          style={{ transform: `translateX(${f2((2 * k - 1) * SPOT_R - 1.2)}px)` }}
         />
       </g>
       <circle r={1.1} className="map-dot-core" />
+    </g>
+  );
+}
+
+const HAND_R = SPOT_R * 0.75;
+
+/** Follow `v` smoothly (network jitter), re-rendering each frame until it arrives. */
+function useGlide(v: Vec, smooth: boolean): Vec {
+  const [cur, setCur] = useState(v);
+  const at = useRef(v);
+  useEffect(() => {
+    if (!smooth) {
+      at.current = v;
+      setCur(v);
+      return;
+    }
+    let raf = 0;
+    let last = performance.now();
+    const step = (t: number) => {
+      const c = at.current;
+      const k = 1 - Math.exp(-(t - last) / 70);
+      last = t;
+      const done = Math.abs(v.x - c.x) + Math.abs(v.y - c.y) < 0.05;
+      at.current = done ? v : { x: c.x + (v.x - c.x) * k, y: c.y + (v.y - c.y) * k };
+      setCur(at.current);
+      if (!done) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [v.x, v.y, smooth]);
+  return cur;
+}
+
+/**
+ * Both sides: one shared shape in body space, centred on the spine, with a
+ * glow and a dot for each hand. Nudges show as shared cues: the ends point
+ * apart or together, one chevron on the spine points up or down, and the
+ * shape smudges that way.
+ */
+function HandsPair({ target, smooth, heading, uid }: { target: { pos: Vec; active: boolean }; smooth: boolean; heading: BackMapProps['heading']; uid: string }) {
+  const { x: w, y } = useGlide({ x: Math.abs(target.pos.x), y: target.pos.y }, smooth);
+  const unpinged = useRef(heading?.id ?? null);
+  const live = heading?.live ?? false;
+  // Split the move into the hands' spread (+ apart) and up/down; show the parts that matter.
+  const d = heading?.d ?? { x: 0, y: 0 };
+  const spread = d.x * (target.pos.x < 0 ? -1 : 1);
+  const mag = Math.hypot(spread, d.y);
+  const shows = (c: number) => live && Math.abs(c) > 0.3 && Math.abs(c) >= mag * 0.35;
+  // Hands already together at the spine can't come closer.
+  const showSpread = shows(spread) && (spread > 0 || w > 1.5);
+  const showVert = shows(d.y);
+  // Chevrons keep their last direction while they fade out.
+  const apart = useRef(true);
+  const down = useRef(true);
+  if (showSpread) apart.current = spread > 0;
+  if (showVert) down.current = d.y > 0;
+  const ky = showVert ? 1 + clamp(0.25 + Math.abs(d.y) * 0.1, 0.3, 0.6) : 1;
+  const vs = down.current ? 1 : -1;
+  const edge = w + HAND_R;
+  const cores = w < 1 ? [0] : [-w, w];
+  return (
+    <g transform={`translate(0 ${f2(y)})`} className={target.active ? 'map-dot is-active' : 'map-dot'}>
+      {heading && heading.id !== unpinged.current && <ellipse key={heading.id} rx={edge} ry={HAND_R} className="map-ping" />}
+      <g className="map-cloud">
+        <g className={`map-smudge${live ? ' is-live' : ''}`} style={{ transform: `translateY(${f2(vs * (ky - 1) * HAND_R)}px) scaleY(${f2(ky)})` }}>
+          {w >= 1 && <ellipse rx={w} ry={HAND_R * 0.7} className="map-bridge" fill={`url(#${uid}-cloud)`} />}
+          {cores.map((cx) => (
+            <circle key={cx === 0 ? 0 : Math.sign(cx)} cx={cx} r={HAND_R} fill={`url(#${uid}-cloud)`} />
+          ))}
+        </g>
+      </g>
+      {[-1, 1].map((side) => (
+        <path
+          key={side}
+          d={CHEVRON}
+          className={`map-smudge-tip${showSpread ? ' is-live' : ''}`}
+          filter={`url(#${uid}-blur)`}
+          style={{ transform: `scaleX(${side}) ${apart.current ? `translateX(${f2(edge - 1.2)}px)` : `translateX(${f2(edge + 2)}px) scaleX(-1)`}` }}
+        />
+      ))}
+      <path
+        d={CHEVRON}
+        className={`map-smudge-tip${showVert ? ' is-live' : ''}`}
+        filter={`url(#${uid}-blur)`}
+        style={{ transform: `translateY(${f2(vs * ((2 * ky - 1) * HAND_R - 1.2))}px) rotate(${vs * 90}deg)` }}
+      />
+      {cores.map((cx) => (
+        <circle key={cx === 0 ? 0 : Math.sign(cx)} cx={cx} r={1.1} className="map-dot-core" />
+      ))}
     </g>
   );
 }
@@ -230,13 +319,8 @@ export function BackMap(props: BackMapProps) {
     [inv],
   );
 
-  const spotHeading = (flip: boolean) =>
-    heading && len(heading.d) > 0.3 ? { ...heading, d: apply(m, flip ? { x: -heading.d.x, y: heading.d.y } : heading.d) } : null;
-  // Both sides: the spot and its mirror, each one hand wide; right by the spine the two are one spot on it.
-  const r = bothSides ? SPOT_R * 0.75 : SPOT_R;
-  const pair = target && bothSides && Math.abs(target.pos.x) > 2.5;
-  const spot = target && bothSides && !pair ? { ...target, pos: { x: 0, y: target.pos.y } } : target;
-  const twin = pair ? { ...target, pos: { x: -target.pos.x, y: target.pos.y } } : null;
+  const spotHeading = heading && len(heading.d) > 0.3 ? { ...heading, d: apply(m, heading.d) } : null;
+  const line = (pts: Vec[]) => pts.map((p) => `${f2(p.x)},${f2(p.y)}`).join(' ');
 
   const labelY = crop === 'torso' ? -5 : -7;
   const labels = [
@@ -265,13 +349,12 @@ export function BackMap(props: BackMapProps) {
       </defs>
       <g transform={`matrix(${m[0]} ${m[2]} ${m[1]} ${m[3]} 0 0)`}>
         <Anatomy uid={uid} />
-        {trail && trail.length > 1 && (
-          <polyline points={trail.map((p) => `${f2(p.x)},${f2(p.y)}`).join(' ')} className="map-trail" />
-        )}
+        {trail && trail.length > 1 && <polyline points={line(trail)} className="map-trail" />}
+        {bothSides && trail && trail.length > 1 && <polyline points={line(trail.map((p) => ({ x: -p.x, y: p.y })))} className="map-trail" />}
+        {bothSides && target && <HandsPair target={target} smooth={smooth} heading={heading} uid={uid} />}
       </g>
       <g className="map-view">
-        {spot && <Spot target={spot} smooth={smooth} m={m} heading={spotHeading(false)} uid={uid} r={r} />}
-        {twin && <Spot key="twin" target={twin} smooth={smooth} m={m} heading={spotHeading(true)} uid={uid} r={r} />}
+        {!bothSides && target && <Spot target={target} smooth={smooth} m={m} heading={spotHeading} uid={uid} />}
         {labels.map((l) => (
           <g key={l.t} transform={`translate(${f2(l.p.x)} ${f2(l.p.y)})`} className="map-side-label">
             <circle r={2.6} />

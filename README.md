@@ -19,7 +19,7 @@ The **receiver** lies face down with their phone beside them and moves a finger 
      - *Nudge*: drag anywhere, like on a trackpad. Slow drags are precise, quick ones travel far.
      - *Map*: touch the spot on the picture.
      - **Double-tap anywhere = right there.**
-     - **Two-finger tap = both sides** (experimental): the spot and its mirror across the spine, one hand each. Nudges keep steering the spot you had and stop at the spine; touching a spot in map mode steers that side. Tap again for one side.
+     - **Two-finger tap = both sides** (experimental): one hand on each side of the spine. The giver sees one shared shape: it widens and narrows as the hands should move apart or together, with arrowheads at its ends, and one arrowhead on the spine for up and down. Nudges keep steering the side you had and stop at the spine; touching a spot in map mode steers that side. Tap again for one side.
    - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the spot as a palm-sized glow: roughly where the hands should be, not an exact point. A nudge pings as it starts, and while the finger moves the glow smudges toward where the spot is going right now, further for faster moves. About a second after the finger lifts it's a round glow again, so what points is always fresh. Optional spoken cues say it in words ("higher and to their right", the area's name). *I'm here* moves the spot to where the hands really are.
 
 - **Map mode learns.** After a double-tap on a spot touched in map mode, the giver taps *I'm here — teach map* and then taps where their hands are. The receiver's phone saves the pair and uses it to correct later touches.

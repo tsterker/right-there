@@ -477,6 +477,9 @@ label.slider input {
 .map-smudge-tip.is-live {
   opacity: 0.7;
 }
+.map-bridge {
+  opacity: 0.55;
+}
 /* One ping as a stroke starts: the earliest moment the giver can react. */
 .map-ping {
   fill: none;

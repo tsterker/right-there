@@ -1,6 +1,11 @@
 import { useSyncExternalStore } from 'react';
+import { inDemo } from './demo';
+
+/** The demo keeps its settings in memory, away from this device's own. */
+const memoryOnly = inDemo;
 
 export function loadJSON<T>(key: string, fallback: T): T {
+  if (memoryOnly) return fallback;
   try {
     const raw = localStorage.getItem(key);
     return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
@@ -10,6 +15,7 @@ export function loadJSON<T>(key: string, fallback: T): T {
 }
 
 export function saveJSON(key: string, value: unknown) {
+  if (memoryOnly) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -26,7 +32,7 @@ export function persisted<T extends object>(key: string, defaults: T) {
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((l) => l());
   window.addEventListener('storage', (e) => {
-    if (e.key === key) {
+    if (e.key === key && !memoryOnly) {
       value = loadJSON<T>(key, defaults);
       emit();
     }

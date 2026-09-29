@@ -1,6 +1,7 @@
 /**
- * Pairing: the host shows a first code, the partner answers
- * with a second one. Codes travel as QR codes (camera) or copy/paste.
+ * Pairing: the host (usually the giver, often on a laptop) shows a first
+ * code; the partner's phone scans it with its camera app and answers with a
+ * second code, which the host's camera reads. Pasting works as a fallback.
  */
 import { useEffect, useRef, useState } from 'react';
 import { ROLE_NAME, otherRole, type Role } from '../../../shared/session';
@@ -10,7 +11,6 @@ import { useLatest } from '../../lib/connection';
 import { navigate } from '../../lib/router';
 import { usePersisted } from '../../lib/storage';
 import { joinLink, p2pSettings } from '../../p2p/address';
-import { announce, isDemo, listen } from '../../p2p/demo';
 import { createAnswer, createOffer, type GuestAnswer, type HostOffer } from '../../p2p/peer';
 import { decodeSignal } from '../../p2p/signal';
 
@@ -32,11 +32,42 @@ function CopyButton({ text, label = 'Copy code' }: { text: string; label?: strin
   );
 }
 
-/** Scan with the camera, or paste. Calls `onCode` with whatever was read. */
-function ReadCode({ onCode, busy, scanHint }: { onCode: (text: string) => void; busy: boolean; scanHint: string }) {
-  const [scanning, setScanning] = useState(false);
+const kindOf = (text: string) => {
+  try {
+    return decodeSignal(text).kind;
+  } catch {
+    return null;
+  }
+};
+
+function PasteCode({ onCode, busy, placeholder = 'Paste the code here' }: { onCode: (text: string) => void; busy: boolean; placeholder?: string }) {
   const [text, setText] = useState('');
-  const hasCamera = cameraAvailable();
+  return (
+    <form
+      className="paste-row"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) onCode(text);
+      }}
+    >
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={placeholder}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+      />
+      <button className="btn" type="submit" disabled={busy || !text.trim()}>
+        Connect
+      </button>
+    </form>
+  );
+}
+
+/** Scan with the camera, or paste. Calls `onCode` with whatever was read. */
+function ReadCode({ onCode, scanHint }: { onCode: (text: string) => void; scanHint: string }) {
+  const [scanning, setScanning] = useState(false);
   return (
     <div className="read-code">
       {scanning ? (
@@ -54,30 +85,12 @@ function ReadCode({ onCode, busy, scanHint }: { onCode: (text: string) => void; 
         </>
       ) : (
         <>
-          {hasCamera && (
-            <button className="btn primary block" disabled={busy} onClick={() => setScanning(true)}>
-              📷 Scan their code
+          {cameraAvailable() && (
+            <button className="btn primary block" onClick={() => setScanning(true)}>
+              📷 Scan the code
             </button>
           )}
-          <form
-            className="paste-row"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (text.trim()) onCode(text);
-            }}
-          >
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="…or paste the code here"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            <button className="btn" type="submit" disabled={busy || !text.trim()}>
-              Connect
-            </button>
-          </form>
+          <PasteCode onCode={onCode} busy={false} placeholder="…or paste the code here" />
         </>
       )}
     </div>
@@ -102,7 +115,7 @@ function NetworkOptions() {
   );
 }
 
-/** Host: show the first code, then read the partner's reply. */
+/** Host: ① show the first code, ② read the partner's reply with the camera (or paste it). */
 export function HostPairing({
   role,
   onConnected,
@@ -120,6 +133,8 @@ export function HostPairing({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  /** Restarts the camera after a reply that didn't work out. */
+  const [scan, setScan] = useState(0);
   const used = useRef(false);
   const connected = useLatest(onConnected);
 
@@ -145,19 +160,8 @@ export function HostPairing({
     };
   }, [role, settings.stun, attempt]);
 
-  // Dev demo: the other frame answers over a BroadcastChannel.
-  useEffect(() => {
-    if (!offer || !isDemo()) return;
-    const stopAnnounce = announce({ kind: 'offer', code: offer.code });
-    const stopListen = listen('answer', (code) => void acceptRef.current(code));
-    return () => {
-      stopAnnounce();
-      stopListen();
-    };
-  }, [offer]);
-
   const accept = async (text: string) => {
-    if (!offer) return;
+    if (!offer || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -167,29 +171,28 @@ export function HostPairing({
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
+      setScan((n) => n + 1);
     }
   };
 
-  const acceptRef = useLatest(accept);
   const partner = ROLE_NAME[otherRole(role)].toLowerCase();
+  const device = role === 'B' ? 'their phone' : 'the giver’s device';
   return (
-    <div className={`pairing${compact ? ' is-compact' : ''}`}>
+    <div className={`pairing host-pairing${compact ? ' is-compact' : ''}`}>
       {!compact && (
         <header className="screen-head">
           <p className="eyebrow">You are the {ROLE_NAME[role].toLowerCase()}</p>
-          <h1>Connect the other device</h1>
+          <h1>Connect the {partner}’s {role === 'B' ? 'phone' : 'device'}</h1>
         </header>
       )}
-      <ol className="pair-steps">
-        <li>
-          <strong>
-            {link && !link.isLink
-              ? `On the ${partner}’s device, open Right There, tap “Scan their code” and point it here.`
-              : `On the ${partner}’s device, scan this with the camera.`}
-          </strong>
+      <div className="pair-flow">
+        <section className="pair-card">
+          <h2>
+            <span className="step-num">1</span> Scan this with {device}’s camera
+          </h2>
           {link ? (
             <div className="pair-qr" data-code={offer?.code} data-link={link.text}>
-              <QR text={link.text} size={compact ? 220 : 260} ecc="L" />
+              <QR text={link.text} size={compact ? 200 : 240} ecc="L" />
               <div className="row center-row">
                 <CopyButton text={link.text} label={link.isLink ? 'Copy link' : 'Copy code'} />
                 <button className="btn ghost small" onClick={() => setAttempt((n) => n + 1)}>
@@ -200,13 +203,32 @@ export function HostPairing({
           ) : (
             !error && <div className="spinner" aria-label="Preparing" />
           )}
-        </li>
-        <li>
-          <strong>Then read the code it shows.</strong>
-          <ReadCode onCode={accept} busy={busy || !offer} scanHint="Point at the code on the other screen" />
-          {busy && <p className="hint">Connecting…</p>}
-        </li>
-      </ol>
+        </section>
+        <div className="pair-arrow" aria-hidden>
+          →
+        </div>
+        <section className="pair-card">
+          <h2>
+            <span className="step-num">2</span> Then hold {device} up to this camera
+          </h2>
+          {cameraAvailable() && offer && !busy && (
+            <QrScanner
+              key={scan}
+              facing="user"
+              hint="Their code goes here"
+              onResult={(t) => {
+                if (kindOf(t) !== 'answer') return false;
+                void accept(t);
+              }}
+            />
+          )}
+          {busy && <p className="waiting">Connecting…</p>}
+          <details className="pair-paste" open={!cameraAvailable()}>
+            <summary>No camera? Paste their code</summary>
+            <PasteCode onCode={accept} busy={busy || !offer} />
+          </details>
+        </section>
+      </div>
       {error && <p className="notice">{error}</p>}
       <NetworkOptions />
       {onCancel && (
@@ -239,7 +261,6 @@ export function GuestPairing({
     let alive = true;
     let current: GuestAnswer | null = null;
     let used = false;
-    let stopAnnounce = () => {};
     setAnswer(null);
     setError(null);
     createAnswer(offerCode, { stun: settings.stun }).then(
@@ -247,8 +268,6 @@ export function GuestPairing({
         if (!alive) return a.close();
         current = a;
         setAnswer(a);
-        stopAnnounce = announce({ kind: 'answer', code: a.code });
-        a.opened.finally(() => stopAnnounce());
         a.opened.then(
           (channel) => {
             if (!alive) return;
@@ -262,33 +281,38 @@ export function GuestPairing({
     );
     return () => {
       alive = false;
-      stopAnnounce();
       if (current && !used) current.close();
     };
   }, [offerCode, settings.stun, connected]);
 
   const role = answer ? otherRole(answer.offer.role) : null;
+  const host = role ? ROLE_NAME[otherRole(role)].toLowerCase() : 'other';
   return (
-    <div className={`pairing${compact ? ' is-compact' : ''}`}>
+    <div className={`pairing guest-pairing${compact ? ' is-compact' : ''}`}>
       {!compact && (
         <header className="screen-head">
           <p className="eyebrow">{role ? `You will be the ${ROLE_NAME[role].toLowerCase()}` : 'Joining'}</p>
-          <h1>Almost there</h1>
+          <h1>
+            <span className="step-num">2</span> Hold this up to the {host}’s camera
+          </h1>
         </header>
       )}
       {error ? (
         <p className="notice">{error}</p>
       ) : answer ? (
         <>
-          <p className="lead">Show this to the other device — hold it in front of its camera (on a laptop: the webcam).</p>
+          {compact && <p className="lead">Hold this up to the {host}’s camera.</p>}
           <div className="pair-qr" data-code={answer.code}>
-            <QR text={answer.code} size={compact ? 240 : 300} ecc="L" />
-            <CopyButton text={answer.code} />
+            <QR text={answer.code} size={compact ? 240 : 300} ecc="L" light="#ffffff" />
           </div>
           <p className="waiting">
-            <span className="pulse" /> Waiting for the other device…
+            <span className="pulse" /> Waiting for their screen to read it…
           </p>
-          <p className="hint">No camera there? Copy the code and paste it on the other device (on Apple devices the clipboard syncs).</p>
+          <details className="pair-options">
+            <summary>Their device has no camera?</summary>
+            <p className="hint">Copy the code and paste it there (on Apple devices the clipboard syncs).</p>
+            <CopyButton text={answer.code} />
+          </details>
           {!compact && (
             <button className="btn link" onClick={() => navigate('/p2p/scan', true)}>
               The other device shows a new code? Scan it instead
@@ -314,31 +338,18 @@ export function ScanFirstCode({ onOffer }: { onOffer: (code: string) => void }) 
   return (
     <div className="pairing">
       <ReadCode
-        busy={false}
-        scanHint="Point at the code on the other device"
+        scanHint="Point at the code on the giver’s screen"
         onCode={(text) => {
-          try {
-            const s = decodeSignal(text);
-            if (s.kind !== 'offer') throw new Error('That is a reply code — show it to the other device instead.');
+          const kind = kindOf(text);
+          if (kind === 'offer') {
             setError(null);
             onOffer(text);
-          } catch (e) {
-            setError((e as Error).message);
+          } else {
+            setError(kind === 'answer' ? 'That is a reply code — show it to the other device instead.' : 'That doesn’t look like a Right There code.');
           }
         }}
       />
       {error && <p className="notice">{error}</p>}
-    </div>
-  );
-}
-
-/** Dev demo: wait for the host frame's first code, then answer it. */
-export function DemoJoin() {
-  useEffect(() => listen('offer', (code) => navigate(`/p2p/join/${code}`, true)), []);
-  return (
-    <div className="screen center-screen">
-      <div className="spinner" aria-hidden />
-      <p>Waiting for the other frame…</p>
     </div>
   );
 }

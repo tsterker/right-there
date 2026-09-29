@@ -20,4 +20,5 @@ One job: navigating the back. Pressure feedback, massage tips, plans, timers, hi
 - **One static file.** `npm run build` inlines everything into `dist/index.html`, which also runs from disk. New code ships inside that bundle, with no backend and no runtime fetches; the opt-in public STUN server is the one exception.
 - **Every change to shared state is an action.** `sanitizeAction` → `reduce` in `src/shared/session.ts` runs on the hosting device and is replayed on the other, so both copies stay equal. A new action brings its reducer case, its validation and a test.
 - **Saved data lives on people's phones.** `mb.*` localStorage values load merged over defaults: add fields freely and keep existing names and meanings, since a rename silently drops someone's calibration.
+- **The demo runs the real screens.** `#/demo` puts both in frames linked by a MessageChannel (`src/client/lib/demo.ts`). There, settings stay in memory and first-run steps are skipped (`inDemo`); a new first-run step needs the same skip.
 - **Both devices run the same build.** After changing messages or state, reload both devices before testing; a stale tab speaks the old protocol.

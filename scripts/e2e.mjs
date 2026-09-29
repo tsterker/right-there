@@ -1,15 +1,14 @@
 /**
  * End-to-end walkthrough in Chrome, no server involved: a "MacBook" opens the
- * built file from disk (file://) and hosts; a "phone" joins over a direct
- * WebRTC link. Covers pairing (paste and in-app camera), the two setup swipes,
- * nudging, double-tap "right there", map mode learning, swapping roles and
- * reconnecting. Finally the dev server: the side-by-side demo page and the
- * QR link it puts on this computer's screen.
+ * built file from disk (file://) and starts as the giver; a "phone" joins over
+ * a direct WebRTC link. Covers pairing (paste, and both cameras), the two setup
+ * swipes, nudging, double-tap "right there", map mode learning, swapping roles,
+ * reconnecting and the demo. Finally the dev server's QR link for a phone.
  *
  *   npm run build && node scripts/e2e.mjs [--out /tmp/right-there-e2e]
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices } from 'playwright-core';
@@ -29,8 +28,17 @@ const OUT = arg('out', '/tmp/right-there-e2e');
 mkdirSync(OUT, { recursive: true });
 if (FILE === LOCAL && !existsSync(fileURLToPath(LOCAL))) throw new Error('Run "npm run build" first.');
 
+// Chrome's fake camera plays this file. It must exist before the first camera starts (Chrome
+// remembers a missing one); it starts blank and later shows QR codes. Running cameras pick up new
+// pictures, so each is written over the old bytes in place: truncating the file under a running
+// camera kills it.
 const CAM = join(OUT, 'fake-camera.y4m');
-if (existsSync(CAM)) unlinkSync(CAM);
+const BLANK = join(OUT, 'blank.png');
+execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=white:s=480x480', '-frames:v', '1', BLANK]);
+/** One camera frame (y4m) showing a picture; always the same size and header. */
+const frame = (png) =>
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', png, '-vf', 'scale=480:480,pad=640:480:80:0:white', '-frames:v', '1', '-pix_fmt', 'yuv420p', '-f', 'yuv4mpegpipe', '-'], { maxBuffer: 1 << 24 });
+writeFileSync(CAM, frame(BLANK));
 const browser = await chromium.launch({
   channel: 'chrome',
   headless: true,
@@ -56,6 +64,17 @@ const watch = (name, page) => {
 };
 const laptop = async (name) => watch(name, await (await browser.newContext({ viewport: { width: 1280, height: 820 } })).newPage());
 const phone = async (name) => watch(name, await (await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 2 })).newPage());
+/** Show the fake camera a QR code from the screen. */
+async function fakeCamera(qr, name) {
+  const png = join(OUT, `${name}.png`);
+  await qr.screenshot({ path: png });
+  const bytes = frame(png);
+  if (bytes.length !== statSync(CAM).size) throw new Error('fake camera frame changed size');
+  const fd = openSync(CAM, 'r+');
+  writeSync(fd, bytes, 0, bytes.length, 0);
+  closeSync(fd);
+}
+
 /** The dev server on its usual port, or null if something (e.g. `npm run dev`) already has it. */
 async function startDevServer() {
   const server = await createServer({ root, logLevel: 'silent' });
@@ -74,9 +93,8 @@ try {
   console.log('1. MacBook opens right-there.html from disk and starts as the giver; the phone joins');
   const mac = await laptop('mac');
   await mac.goto(FILE);
-  await mac.getByText('Scan their code').waitFor();
   await shot(mac, 'mac-landing');
-  await mac.getByRole('button', { name: /giving the massage/i }).click();
+  await mac.getByRole('button', { name: 'Start as the giver' }).click();
   await mac.waitForSelector('.pair-qr[data-code]');
   const qrLink = (await mac.locator('.pair-qr[data-link]').getAttribute('data-link')) ?? '';
   check(/^https:\/\/.+#\/p2p\/join\/[\w-]+$/.test(qrLink), `the QR code opens the app on the phone (${qrLink.split('#')[0]})`);
@@ -147,42 +165,58 @@ try {
   check(after !== 'No spot yet' && (await iphone.locator('.first-view').count()) === 0, `phone is back and sees the spot set meanwhile ("${after}")`);
   await shot(iphone, 'phone-giver-rotated');
 
-  console.log('7. Pairing through the camera: the phone scans the Mac’s QR code in the app');
+  console.log('7. Both cameras: the phone scans the Mac’s code in the app, the Mac’s webcam reads the reply');
   const mac2 = await laptop('mac2');
   await mac2.goto(FILE);
-  await mac2.getByRole('button', { name: /getting the massage/i }).click();
+  await mac2.getByRole('button', { name: 'Start as the giver' }).click();
   await mac2.waitForSelector('.pair-qr .qr svg');
-  const qr = join(OUT, 'mac-qr.png');
-  await mac2.locator('.pair-qr .qr').screenshot({ path: qr });
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-loop', '1', '-i', qr, '-t', '2', '-vf', 'scale=480:480,pad=640:480:80:0:white', '-pix_fmt', 'yuv420p', CAM]);
+  await mac2.waitForSelector('.qr-scanner video');
+  // Both cameras now see the Mac's own code; the Mac's has to ignore it.
+  await fakeCamera(mac2.locator('.pair-qr .qr'), 'mac-qr');
   const phone2 = await phone('phone2');
   await phone2.goto(`${GUEST}#/p2p/scan`);
-  await phone2.getByRole('button', { name: /Scan their code/ }).click();
+  await phone2.getByRole('button', { name: /Scan the code/ }).click();
   await phone2.waitForSelector('.pair-qr[data-code]', { timeout: 20000 });
-  check(true, 'in-app camera read the QR code and produced a reply');
-  await mac2.fill('.paste-row input', await codeOf(phone2));
-  await mac2.getByRole('button', { name: 'Connect' }).click();
-  await mac2.waitForSelector('.setup-intro', { timeout: 20000 });
-  await phone2.waitForSelector('.giver-live', { timeout: 20000 });
-  check(true, 'connected: Mac is the receiver, phone the giver');
+  check(true, 'the phone’s camera read the Mac’s code and shows its reply');
+  await fakeCamera(phone2.locator('.pair-qr .qr'), 'phone-qr');
+  await mac2.waitForSelector('.giver-live', { timeout: 20000 });
+  await phone2.waitForSelector('.setup-intro', { timeout: 20000 });
+  check(true, 'the Mac’s webcam read the reply: connected without typing anything');
 
-  console.log('8. Dev server: both screens side by side, and the QR link for a phone');
+  console.log('8. The demo: both screens side by side, already connected');
+  const desk = await laptop('demo');
+  await desk.goto(FILE);
+  await desk.getByRole('button', { name: /Try the demo/ }).click();
+  const rx = desk.frameLocator('iframe[title=Receiver]');
+  const gx = desk.frameLocator('iframe[title=Giver]');
+  await rx.locator('.receiver-pad').waitFor({ timeout: 20000 });
+  await gx.locator('.giver-live').waitFor({ timeout: 20000 });
+  check((await gx.locator('.first-view').count()) === 0, 'the demo opens straight on the touch pad and the map');
+  const frame = await desk.locator('iframe[title=Receiver]').boundingBox();
+  const mid = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+  const end = { x: mid.x + 60, y: mid.y - 90 };
+  await mouseDrag(desk, mid, end);
+  await gx.locator('.nudge-chip').waitFor({ timeout: 5000 });
+  await desk.mouse.dblclick(end.x, end.y);
+  await gx.locator('.banner-good').waitFor({ timeout: 5000 });
+  check(true, 'dragging on the receiver moves the giver’s dot; double-click = right there');
+  await shot(desk, 'demo');
+  const saved = await desk.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mb.')));
+  check(saved.length === 0, `the demo leaves this device’s saved settings alone (${saved.join(', ') || 'nothing saved'})`);
+  await rx.getByRole('button', { name: 'More' }).click();
+  await rx.getByRole('button', { name: 'Leave' }).click();
+  await desk.getByRole('button', { name: 'Start as the giver' }).waitFor({ timeout: 5000 });
+  check(true, '“Leave” inside the demo returns to the start page');
+
+  console.log('9. Dev server: the QR link it puts on this computer’s screen');
   dev = await startDevServer();
   if (!dev) {
     console.log('  – skipped: the dev server port is taken (is `npm run dev` running?)');
   } else {
     const base = `http://localhost:${dev.config.server.port}/`;
-    const desk = await laptop('dev');
-    await desk.goto(`${base}#/demo`);
-    const rx = desk.frameLocator('iframe[title=Receiver]');
-    const gx = desk.frameLocator('iframe[title=Giver]');
-    await rx.locator('.setup-intro').waitFor({ timeout: 20000 });
-    await gx.locator('.giver-live').waitFor({ timeout: 20000 });
-    check(true, 'demo page pairs its two frames by itself');
-    await shot(desk, 'dev-demo');
     const devHost = await laptop('dev-host');
     await devHost.goto(base);
-    await devHost.getByRole('button', { name: /giving the massage/i }).click();
+    await devHost.getByRole('button', { name: 'Start as the giver' }).click();
     const devLink = (await devHost.locator('.pair-qr[data-link]').getAttribute('data-link')) ?? '';
     check(/^https?:\/\/(?!localhost)[^/]+\/#\/p2p\/join\//.test(devLink), `QR codes from localhost point phones at this computer (${devLink.split('#')[0]})`);
   }

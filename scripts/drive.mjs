@@ -6,13 +6,19 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const codeOf = async (page, scope = '') =>
   (await page.locator(`${scope} .pair-qr[data-code]`.trim()).first().getAttribute('data-code')) ?? '';
 
-/** The host shows its code: the guest opens the link from the QR code, the host pastes the reply. */
-export async function pair(host, guest, guestUrl, scope = '') {
+/**
+ * The host shows its code: the guest opens the link from the QR code, the host
+ * pastes the reply. `beforeConnect` runs while the guest shows its reply.
+ */
+export async function pair(host, guest, guestUrl, scope = '', beforeConnect = async () => {}) {
   await host.waitForSelector(`${scope} .pair-qr[data-code]`.trim());
   const offer = await codeOf(host, scope);
   await guest.goto(`${guestUrl}#/p2p/join/${offer}`);
   await guest.waitForSelector('.pair-qr[data-code]');
   const reply = await codeOf(guest);
+  await beforeConnect();
+  const paste = host.locator(`${scope} .pair-paste`.trim());
+  if (!(await paste.evaluate((d) => d.open))) await paste.locator('summary').click();
   await host.fill(`${scope} .paste-row input`.trim(), reply);
   await host.locator(scope || 'body').getByRole('button', { name: 'Connect' }).click();
   return { offer, reply };

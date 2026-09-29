@@ -31,7 +31,7 @@ async function run(hostEngine, guestEngine) {
     const guest = await (await gb.newContext(guestEngine === 'webkit' ? devices['iPhone 13'] : devices['Pixel 7'])).newPage();
     for (const [n, p] of [['host', host], ['guest', guest]]) p.on('pageerror', (e) => errors.push(`${n}: ${e.message}`));
     await host.goto(FILE);
-    await host.getByRole('button', { name: /giving the massage/i }).click();
+    await host.getByRole('button', { name: 'Start as the giver' }).click();
     await pair(host, guest, FILE);
     const t0 = Date.now();
     await guest.waitForSelector('.setup-intro', { timeout: 20000 });

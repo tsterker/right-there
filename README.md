@@ -4,15 +4,15 @@ Show your partner where to massage, without saying a word.
 
 The **receiver** lies face down with their phone beside them and moves a finger to show where they want the hands. The **giver** sees the spot as a dot on a map of the back. Double-tap when it's *right there*.
 
-**Open https://tsterker.github.io/right-there/ on both devices.** Prototype. There's no server: the two devices talk to each other directly over the Wi-Fi.
+**Start at https://tsterker.github.io/right-there/** on the giver's screen; a laptop is perfect. *Try the demo* there shows both screens side by side, already connected. Prototype. There's no server: the two devices talk to each other directly over the Wi-Fi.
 
 | Pair | Receiver | Giver |
 | :-: | :-: | :-: |
-| <img src="docs/pair.png" width="240" alt="Pairing: the giver's phone shows a QR code"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, the nudge direction and the area name"> |
+| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, the nudge direction and the area name"> |
 
 ## How it works
 
-1. **Pair.** Pick a role on one device, then scan its QR code with the other device's camera. The link opens Right There, which shows a reply code. Hold that up to the first device and tap *Scan their code*, or copy and paste it.
+1. **Pair.** The giver taps *Start as the giver*. The receiver scans the QR code with their phone's camera app; the link opens Right There, which shows a reply code. They hold it up to the giver's camera, and the two are connected. No camera? Copy and paste the code.
 2. **Two swipes (receiver).** Put the phone flat where your hand rests. Swipe *neck → lower back*, then *left → right*. This tells the app how the phone is lying. Next time you can tap *Same as last time*.
 3. **Guide.**
    - **Receiver:**
@@ -38,7 +38,7 @@ npm run dev:phone    # the same, plus a temporary HTTPS link for the phone
 - **Testing with a phone.** Open `http://localhost:4747` on the computer. Its QR codes point the phone at the dev server, and edits reload on both screens.
   - **`npm run dev`:** the phone uses this computer's Wi-Fi address over plain HTTP.
   - **`npm run dev:phone`:** the phone gets HTTPS through a Cloudflare quick tunnel (no account needed). Its camera and screen-on then work too.
-- **Both screens in one window:** `http://localhost:4747/#/demo` pairs them automatically. Drag on the receiver with the mouse; double-click = right there.
+- **Both screens in one window:** the demo (`http://localhost:4747/#/demo`) links them directly, without pairing. Drag on the receiver with the mouse; double-click = right there.
 - **Checks:** `npm test` · `npm run typecheck` · `npm run e2e`. The e2e run builds the app, then drives Chrome and WebKit through a whole session. It needs Google Chrome, plus `npx playwright-core install webkit` once.
 - **README screenshots:** `npm run screenshots` refreshes `docs/*.png`.
 - **Build and publish:** `npm run build` writes one self-contained file, `dist/index.html` (also copied to `dist/right-there.html`), which works on any static host or opened from disk. Every push to `main` publishes it to GitHub Pages.

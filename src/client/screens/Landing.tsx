@@ -14,41 +14,41 @@ export function Landing() {
 
         <ol className="how-it-works">
           <li>
-            <b>Receiver</b> lies down, phone beside them, and moves a finger to show where.
+            <span aria-hidden>💻</span>
+            <span>
+              The <b>giver</b> starts here. This screen shows the map — a laptop is perfect.
+            </span>
           </li>
           <li>
-            <b>Giver</b> sees the spot on a map of the back.
+            <span aria-hidden>📱</span>
+            <span>
+              The <b>receiver</b> scans the code with their phone and lies down, phone beside them.
+            </span>
           </li>
           <li>
-            Double-tap when it’s <b>right there</b>.
+            <span aria-hidden>☝️</span>
+            <span>
+              They move a finger to show where. Double-tap when it’s <b>right there</b>.
+            </span>
           </li>
         </ol>
 
-        <div className="role-cards">
-          <button className="role-card role-a" onClick={() => navigate('/p2p/host/A', true)}>
-            <span className="role-emoji">🛏</span>
-            <strong>I'm getting the massage</strong>
-            <small>This device becomes the touch pad</small>
+        <div className="landing-actions">
+          <button className="btn primary big" onClick={() => navigate('/p2p/host/B', true)}>
+            Start as the giver
           </button>
-          <button className="role-card role-b" onClick={() => navigate('/p2p/host/B', true)}>
-            <span className="role-emoji">👐</span>
-            <strong>I'm giving the massage</strong>
-            <small>This device shows the back map</small>
+          <button className="btn big" onClick={() => navigate('/demo')}>
+            ▶ Try the demo
           </button>
         </div>
 
-        <div className="join">
-          <label>The other device already shows a code?</label>
-          <button className="btn primary" onClick={() => navigate('/p2p/scan', true)}>
-            📷 Scan their code
+        <p className="landing-receiver">
+          Getting the massage? Scan the giver’s code with your phone’s camera,{' '}
+          <button className="btn link inline" onClick={() => navigate('/p2p/scan', true)}>
+            or scan it here
           </button>
-        </div>
-
-        {import.meta.env.DEV && (
-          <button className="btn ghost small" onClick={() => navigate('/demo')}>
-            Both screens side by side (dev)
-          </button>
-        )}
+          .
+        </p>
 
         <p className="fineprint">Both devices on the same Wi-Fi. They connect directly — nothing goes through a server.</p>
       </div>

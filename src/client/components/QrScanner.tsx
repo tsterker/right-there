@@ -5,14 +5,30 @@ import { useLatest } from '../lib/connection';
 
 export const cameraAvailable = () => typeof navigator.mediaDevices?.getUserMedia === 'function';
 
-export function QrScanner({ onResult, hint }: { onResult: (text: string) => void; hint?: string }) {
+/**
+ * `onResult` returns false to ignore a code and keep scanning. `facing`: the
+ * back camera to scan something in front of you, the front one to have
+ * something held up to this screen.
+ */
+export function QrScanner({
+  onResult,
+  hint,
+  facing = 'environment',
+}: {
+  onResult: (text: string) => boolean | void;
+  hint?: string;
+  facing?: 'environment' | 'user';
+}) {
   const video = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [mirrored, setMirrored] = useState(false);
   const result = useLatest(onResult);
 
   useEffect(() => {
+    setError(null);
     let stopped = false;
+    let ignored: string | null = null;
     let stream: MediaStream | null = null;
     let raf = 0;
     let last = 0;
@@ -32,14 +48,14 @@ export function QrScanner({ onResult, hint }: { onResult: (text: string) => void
       canvas.height = h;
       ctx.drawImage(v, 0, 0, w, h);
       const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'attemptBoth' });
-      if (code?.data) {
-        stopped = true;
-        result.current(code.data);
+      if (code?.data && code.data !== ignored) {
+        if (result.current(code.data) === false) ignored = code.data;
+        else stopped = true;
       }
     };
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
       .then((s) => {
         if (stopped) {
           s.getTracks().forEach((track) => track.stop());
@@ -56,6 +72,7 @@ export function QrScanner({ onResult, hint }: { onResult: (text: string) => void
         raf = requestAnimationFrame(tick);
       })
       .catch((e: Error) => {
+        if (stopped) return;
         setError(
           e.name === 'NotAllowedError'
             ? 'Camera access was blocked. Allow it in the browser, or paste the code instead.'
@@ -68,12 +85,17 @@ export function QrScanner({ onResult, hint }: { onResult: (text: string) => void
       cancelAnimationFrame(raf);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [result]);
+  }, [result, attempt, facing]);
 
   return (
     <div className="qr-scanner">
       {error ? (
-        <p className="notice">{error}</p>
+        <div className="qr-scanner-error">
+          <p>{error}</p>
+          <button className="btn small" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </button>
+        </div>
       ) : (
         <>
           <video ref={video} playsInline muted autoPlay className={mirrored ? 'is-mirrored' : ''} />

@@ -10,6 +10,7 @@ import { BackMap, viewMatrix, type MapHandle } from '../../components/BackMap';
 import { StatusBar } from '../../components/StatusBar';
 import { Sheet, Toast } from '../../components/ui';
 import { useActions, useSession } from '../../lib/connection';
+import { inDemo } from '../../lib/demo';
 import { navigate } from '../../lib/router';
 import { useGiverSettings } from '../../lib/settings';
 import { say, unlockSpeech } from '../../lib/speech';
@@ -95,7 +96,7 @@ export function GiverLive() {
         </button>
       </nav>
 
-      {!settings.viewChosen && (
+      {!settings.viewChosen && !inDemo && (
         <div className="overlay first-view">
           <h2>Where are you standing?</h2>
           <p className="lead">The map turns to match what you see. Left and right always mean their left and right.</p>

@@ -2,18 +2,18 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 
-export function QR({ text, size = 180, ecc = 'M' }: { text: string; size?: number; ecc?: 'L' | 'M' }) {
+export function QR({ text, size = 180, ecc = 'M', light = '#f4efe9' }: { text: string; size?: number; ecc?: 'L' | 'M'; light?: string }) {
   const [svg, setSvg] = useState('');
   useEffect(() => {
     let alive = true;
-    QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: ecc, color: { dark: '#0e1116', light: '#f4efe9' } }).then(
+    QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: ecc, color: { dark: '#0e1116', light } }).then(
       (s) => alive && setSvg(s),
     );
     return () => {
       alive = false;
     };
-  }, [text, ecc]);
-  return <div className="qr" style={{ width: size, height: size }} dangerouslySetInnerHTML={{ __html: svg }} />;
+  }, [text, ecc, light]);
+  return <div className="qr" style={{ width: size, height: size, background: light }} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: string; children: ReactNode }) {

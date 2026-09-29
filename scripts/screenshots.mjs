@@ -1,6 +1,7 @@
 /**
- * Refreshes the README screenshots in docs/: pairing, the receiver's touch pad
- * and the giver's map, on two emulated phones connected over WebRTC.
+ * Refreshes the README screenshots in docs/: pairing (the receiver's phone
+ * showing its reply code), the receiver's touch pad and the giver's map, on two
+ * emulated phones connected over WebRTC.
  *
  *   npm run screenshots
  */
@@ -25,12 +26,9 @@ const save = async (page, name) => {
 try {
   const giver = await phone();
   await giver.goto(FILE);
-  await giver.getByRole('button', { name: /giving the massage/i }).click();
-  await giver.waitForSelector('.pair-qr .qr svg');
-  await save(giver, 'pair');
-
+  await giver.getByRole('button', { name: 'Start as the giver' }).click();
   const receiver = await phone();
-  await pair(giver, receiver, FILE);
+  await pair(giver, receiver, FILE, '', () => save(receiver, 'pair'));
   await giver.getByRole('radio', { name: /At their feet/ }).click();
   await setupSwipes(receiver, (p, a, b) => touchDrag(p, a, b, 500));
   await touchDrag(receiver, { x: 190, y: 430 }, { x: 250, y: 330 }, 900);

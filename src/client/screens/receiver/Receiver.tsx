@@ -1,12 +1,14 @@
 /** The receiver's device: the two setup swipes first, then straight to pointing. */
 import { useEffect, useState } from 'react';
 import { describeOrientation } from '../../../shared/calibration';
+import { inDemo } from '../../lib/demo';
 import { ReceiverPad, type Notice } from './Pad';
 import { ReceiverSetup } from './Setup';
 import { useMapLearning } from './sync';
 
 export function Receiver() {
-  const [setup, setSetup] = useState(true);
+  // The demo starts right at pointing; the swipes are one tap away in the menu.
+  const [setup, setSetup] = useState(!inDemo);
   const [notice, setNotice] = useState<Notice | null>(null);
   const learned = useMapLearning();
   useEffect(() => {

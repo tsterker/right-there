@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { otherRole, ROLE_NAME, type Role } from '../../../shared/session';
 import { Loading, Sheet } from '../../components/ui';
 import { SessionConnection, SessionContext, useConnection, useSession } from '../../lib/connection';
+import { demoChannel, inDemo } from '../../lib/demo';
 import { navigate } from '../../lib/router';
 import { useKeepAwake } from '../../lib/wakeLock';
 import { ChannelLink, PeerHost } from '../../p2p/host';
@@ -19,12 +20,13 @@ function SessionScreens() {
   return role === 'A' ? <Receiver /> : <GiverLive />;
 }
 
-/** `#/p2p/host/A`: this device hosts; show pairing until the partner is connected. */
+/** `#/p2p/host/B`: this device hosts; show pairing until the partner is connected. */
 export function P2PHostRoute({ role }: { role: Role }) {
   const [host] = useState(() => new PeerHost(role));
   const api = useConnection(() => new SessionConnection(host.code, host.role, host.localLink()));
   useKeepAwake();
   useEffect(() => () => host.close(), [host]);
+  useEffect(() => (inDemo ? demoChannel((channel) => host.attachPartner(channel)) : undefined), [host]);
   const [repair, setRepair] = useState(false);
 
   if (!api.state) return <Loading text="Starting…" />;
@@ -36,7 +38,9 @@ export function P2PHostRoute({ role }: { role: Role }) {
   };
   return (
     <SessionContext.Provider value={api}>
-      {!partner.joined ? (
+      {!partner.joined && inDemo ? (
+        <Loading text="Starting the demo…" />
+      ) : !partner.joined ? (
         <div className="screen p2p">
           <div className="scroll">
             <HostPairing role={api.role} onConnected={attach} onCancel={() => navigate('/')} />
@@ -130,15 +134,31 @@ function GuestReconnect({ link }: { link: ChannelLink }) {
   );
 }
 
+/** `#/p2p/demo-join`: the demo's receiver frame, linked to the giver frame by the demo page. */
+export function DemoJoin() {
+  const [link] = useState(() => new ChannelLink());
+  const [ready, setReady] = useState(false);
+  useEffect(() => () => link.close(), [link]);
+  useEffect(
+    () =>
+      demoChannel((channel) => {
+        link.use(channel);
+        setReady(true);
+      }),
+    [link],
+  );
+  return ready ? <GuestSession link={link} role="A" /> : <Loading text="Starting the demo…" />;
+}
+
 /** `#/p2p/scan`: join by scanning the host's code inside the app. */
 export function P2PScanRoute() {
   return (
     <div className="screen p2p">
       <div className="scroll">
         <header className="screen-head">
-          <p className="eyebrow">Join</p>
-          <h1>Scan the other device’s code</h1>
-          <p className="lead">The one who started shows a QR code. Point this camera at it — or paste the code.</p>
+          <p className="eyebrow">You will be the receiver</p>
+          <h1>Scan the code on the giver’s screen</h1>
+          <p className="lead">Your phone’s camera app works too: it opens Right There right away.</p>
         </header>
         <ScanFirstCode onOffer={(c) => navigate(`/p2p/join/${extractCode(c)}`, true)} />
         <button className="btn link" onClick={() => navigate('/')}>

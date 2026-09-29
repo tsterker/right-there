@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { Role } from '../../shared/session';
+import { DEMO_EXIT, inDemo } from './demo';
 
 const isRole = (v: unknown): v is Role => v === 'A' || v === 'B';
 
@@ -24,6 +25,11 @@ export function parseHash(hash: string): Route {
 }
 
 export function navigate(path: string, replace = false) {
+  // Leaving from inside the demo leaves the whole demo.
+  if (inDemo && path === '/') {
+    window.parent.postMessage(DEMO_EXIT, '*');
+    return;
+  }
   const hash = `#${path}`;
   if (replace) {
     history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);

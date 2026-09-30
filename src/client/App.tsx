@@ -1,7 +1,7 @@
 import { parseHash, useHash } from './lib/router';
 import { Demo } from './screens/Demo';
 import { Landing } from './screens/Landing';
-import { DemoJoin, P2PHostRoute, P2PJoinRoute, P2PScanRoute } from './screens/p2p/P2PRoutes';
+import { DemoJoin, P2PHostRoute, P2PJoinRoute, P2PReplyRoute, P2PScanRoute } from './screens/p2p/P2PRoutes';
 
 export function App() {
   const route = parseHash(useHash());
@@ -10,6 +10,8 @@ export function App() {
       return <P2PHostRoute key={route.role} role={route.role} />;
     case 'join':
       return <P2PJoinRoute key={route.code} code={route.code} />;
+    case 'reply':
+      return <P2PReplyRoute key={route.code} code={route.code} />;
     case 'scan':
       return <P2PScanRoute />;
     case 'demo':

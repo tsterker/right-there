@@ -8,6 +8,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'host'; role: Role }
   | { name: 'join'; code: string }
+  | { name: 'reply'; code: string }
   | { name: 'scan' }
   | { name: 'demo' }
   | { name: 'demo-join' };
@@ -17,6 +18,7 @@ export function parseHash(hash: string): Route {
   if (parts[0] === 'p2p') {
     if (parts[1] === 'host' && isRole(parts[2])) return { name: 'host', role: parts[2] };
     if (parts[1] === 'join' && parts[2] && /^[A-Za-z0-9_-]+$/.test(parts[2])) return { name: 'join', code: parts[2] };
+    if (parts[1] === 'reply' && parts[2] && /^[A-Za-z0-9_-]+$/.test(parts[2])) return { name: 'reply', code: parts[2] };
     if (parts[1] === 'scan') return { name: 'scan' };
     if (parts[1] === 'demo-join') return { name: 'demo-join' };
   }

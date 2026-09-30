@@ -147,6 +147,7 @@ describe('compact codes', () => {
     expect(extractCode(`https://tsterker.github.io/right-there/#/p2p/join/${code}`)).toBe(code);
     expect(decodeSignal(`https://example.org/#/p2p/join/${code}`).ufrag).toBe('EsAw');
     expect(extractCode(`Here's my code:\n${code}\n👍`)).toBe(code);
+    expect(extractCode(`Tap to connect: https://tsterker.github.io/right-there/#/p2p/reply/${code}`)).toBe(code);
     expect(() => extractCode('hello there')).toThrow(SignalError);
   });
 });

@@ -198,6 +198,44 @@ try {
   await phone2.waitForSelector('.setup-intro', { timeout: 20000 });
   check(true, 'the Mac’s webcam read the reply: connected without typing anything');
 
+  console.log('7b. No camera: the reply goes back as a link, tapped on the host device');
+  const mac3 = await laptop('mac3');
+  await mac3.goto(FILE);
+  await mac3.getByRole('button', { name: 'Start as the giver' }).click();
+  await mac3.waitForSelector('.pair-qr[data-code]');
+  const phone3 = await phone('phone3');
+  await phone3.goto(`${GUEST}#/p2p/join/${await codeOf(mac3)}`);
+  await phone3.waitForSelector('.pair-qr[data-code]');
+  const replyCode = await codeOf(phone3);
+  const elsewhere = await laptop('other-browser');
+  await elsewhere.goto(`${FILE}#/p2p/reply/${replyCode}`);
+  await elsewhere.waitForSelector('.reply-handoff[data-status="nowhere"]', { timeout: 5000 });
+  check(true, 'opened in a browser without the pairing screen, the link says so');
+  const tab = watch('mac3-link', await mac3.context().newPage());
+  await tab.goto(`${FILE}#/p2p/reply/${replyCode}`);
+  await mac3.waitForSelector('.giver-live', { timeout: 20000 });
+  await phone3.waitForSelector('.setup-intro', { timeout: 20000 });
+  await tab.waitForSelector('.reply-handoff[data-status="connected"]', { timeout: 5000 });
+  check(true, 'the link, opened in a new tab of the host’s browser, connects the pairing tab; the link tab says so');
+  // A paused tab (phones pause background tabs) misses the storage event: it reads the reply when shown again.
+  const mac4 = await laptop('mac4');
+  await mac4.goto(FILE);
+  await mac4.getByRole('button', { name: 'Start as the giver' }).click();
+  await mac4.waitForSelector('.pair-qr[data-code]');
+  const phone4 = await phone('phone4');
+  await phone4.goto(`${GUEST}#/p2p/join/${await codeOf(mac4)}`);
+  await phone4.waitForSelector('.pair-qr[data-code]');
+  const late = await codeOf(phone4);
+  await mac4.evaluate((code) => {
+    const { session } = JSON.parse(localStorage.getItem('mb.pairWaiting'));
+    localStorage.setItem('mb.pairReply', JSON.stringify({ session, code, at: Date.now() }));
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, late);
+  await mac4.waitForSelector('.giver-live', { timeout: 20000 });
+  check(true, 'a pairing tab that was in the background picks up the reply when it is shown again');
+  const leftover = await mac3.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mb.pair')));
+  check(!leftover.includes('mb.pairWaiting') && !leftover.includes('mb.pairReply'), `nothing left waiting (${leftover.join(', ') || 'none'})`);
+
   console.log('8. The demo: both screens side by side, already connected');
   const desk = await laptop('demo');
   await desk.goto(FILE);

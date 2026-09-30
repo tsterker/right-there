@@ -12,6 +12,7 @@ import { navigate } from '../../lib/router';
 import { usePersisted } from '../../lib/storage';
 import { joinLink, p2pSettings } from '../../p2p/address';
 import { createAnswer, createOffer, type GuestAnswer, type HostOffer } from '../../p2p/peer';
+import { awaitReply, handOver, onTaken, replyLink, replyTaken } from '../../p2p/handoff';
 import { decodeSignal } from '../../p2p/signal';
 
 async function copy(text: string) {
@@ -32,10 +33,10 @@ function CopyButton({ text, label = 'Copy code' }: { text: string; label?: strin
   );
 }
 
-function ShareButton({ text }: { text: string }) {
+function ShareButton({ link, code }: { link: string | null; code: string }) {
   return (
-    <button className="btn small" onClick={() => void navigator.share({ text }).catch(() => {})}>
-      Share code
+    <button className="btn small" onClick={() => void navigator.share(link ? { url: link } : { text: code }).catch(() => {})}>
+      {link ? 'Share link' : 'Share code'}
     </button>
   );
 }
@@ -177,6 +178,7 @@ export function HostPairing({
     try {
       const channel = await offer.accept(text);
       used.current = true;
+      replyTaken(offer.session);
       connected.current(channel, offer.close);
     } catch (e) {
       setError((e as Error).message);
@@ -184,6 +186,10 @@ export function HostPairing({
       setScan((n) => n + 1);
     }
   };
+
+  // Their reply can also arrive as a link, tapped on this device.
+  const acceptLatest = useLatest(accept);
+  useEffect(() => (offer ? awaitReply(offer.session, (code) => void acceptLatest.current(code)) : undefined), [offer, acceptLatest]);
 
   const partner = ROLE_NAME[otherRole(role)].toLowerCase();
   const device = role === 'B' ? 'their phone' : 'the giver’s device';
@@ -320,10 +326,13 @@ export function GuestPairing({
           </p>
           <details className="pair-options">
             <summary>Their camera isn’t working?</summary>
-            <p className="hint">Send them this code (Messages, AirDrop, WhatsApp…) and paste it there. Between Apple devices, copy and paste also works.</p>
+            <p className="hint">
+              Send them this link (Messages, AirDrop, WhatsApp…). Tapping it on their device connects, if it opens in the browser that shows their code. Pasting it into
+              their screen works too.
+            </p>
             <div className="row">
-              {'share' in navigator && <ShareButton text={answer.code} />}
-              <CopyButton text={answer.code} />
+              {'share' in navigator && <ShareButton link={replyLink(answer.code)} code={answer.code} />}
+              <CopyButton text={replyLink(answer.code) ?? answer.code} label={replyLink(answer.code) ? 'Copy link' : 'Copy code'} />
             </div>
           </details>
           {!compact && (
@@ -341,6 +350,65 @@ export function GuestPairing({
           {compact ? 'Close' : 'Cancel'}
         </button>
       )}
+    </div>
+  );
+}
+
+/** A tapped reply link: hand the code to this browser's waiting pairing tab. */
+export function ReplyHandoff({ code }: { code: string }) {
+  const [status, setStatus] = useState<'sent' | 'connected' | 'nowhere' | 'invalid'>('sent');
+  useEffect(() => {
+    let session: string;
+    try {
+      const s = decodeSignal(code);
+      if (s.kind !== 'answer') throw new Error('not a reply');
+      session = s.session;
+    } catch {
+      setStatus('invalid');
+      return;
+    }
+    if (!handOver(code, session)) {
+      setStatus('nowhere');
+      return;
+    }
+    setStatus('sent');
+    return onTaken(session, () => setStatus('connected'));
+  }, [code]);
+
+  return (
+    <div className="pairing reply-handoff" data-status={status}>
+      {status === 'connected' ? (
+        <header className="screen-head">
+          <h1>Connected ✓</h1>
+          <p className="lead">You can close this tab and go back to Right There.</p>
+        </header>
+      ) : status === 'sent' ? (
+        <header className="screen-head">
+          <h1>Now switch back to the other tab</h1>
+          <p className="lead">The one showing the QR code: it connects as soon as you’re there.</p>
+          <p className="waiting">
+            <span className="pulse" /> Waiting for it…
+          </p>
+        </header>
+      ) : status === 'nowhere' ? (
+        <>
+          <header className="screen-head">
+            <h1>No pairing screen here</h1>
+            <p className="lead">
+              This browser isn’t showing a Right There QR code for this reply. If the link opened inside another app, copy it and paste it into the pairing screen
+              instead, or open it in the browser where that screen is.
+            </p>
+          </header>
+          <CopyButton text={code} />
+        </>
+      ) : (
+        <header className="screen-head">
+          <h1>That link doesn’t carry a reply code</h1>
+        </header>
+      )}
+      <button className="btn link" onClick={() => navigate('/')}>
+        Start page
+      </button>
     </div>
   );
 }

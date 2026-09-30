@@ -13,7 +13,7 @@ import { ChannelLink, PeerHost } from '../../p2p/host';
 import { extractCode } from '../../p2p/signal';
 import { GiverLive } from '../giver/Live';
 import { Receiver } from '../receiver/Receiver';
-import { GuestPairing, HostPairing, ScanFirstCode } from './Pairing';
+import { GuestPairing, HostPairing, ReplyHandoff, ScanFirstCode } from './Pairing';
 
 function SessionScreens() {
   const { role } = useSession();
@@ -151,6 +151,17 @@ export function DemoJoin() {
 }
 
 /** `#/p2p/scan`: join by scanning the host's code inside the app. */
+/** `#/p2p/reply/<code>`: a reply link tapped on the host device; hands the code to its pairing tab. */
+export function P2PReplyRoute({ code }: { code: string }) {
+  return (
+    <div className="screen p2p">
+      <div className="scroll">
+        <ReplyHandoff code={code} />
+      </div>
+    </div>
+  );
+}
+
 export function P2PScanRoute() {
   return (
     <div className="screen p2p">

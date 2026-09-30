@@ -213,7 +213,7 @@ export function decodeSignal(input: string): Signal {
 /** Accepts a raw code or a URL that contains one (e.g. from a scanned QR code). */
 export function extractCode(input: string): string {
   const text = input.trim();
-  const m = /\/p2p\/join\/([A-Za-z0-9_-]+)/.exec(text);
+  const m = /\/p2p\/(?:join|reply)\/([A-Za-z0-9_-]+)/.exec(text);
   if (m) return m[1];
   const bare = /^[A-Za-z0-9_-]+$/.exec(text);
   if (bare) return text;

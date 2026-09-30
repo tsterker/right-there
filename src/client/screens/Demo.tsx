@@ -1,6 +1,7 @@
 /** Both devices side by side in one window, already connected: try it before pairing real ones. */
 import { useEffect, useRef, useState } from 'react';
 import { DEMO_EXIT, DEMO_LINK, DEMO_READY } from '../lib/demo';
+import { DEMO_LOOK, lookStore } from '../lib/look';
 import { navigate } from '../lib/router';
 
 const newId = () => Math.random().toString(36).slice(2, 8);
@@ -25,6 +26,20 @@ export function Demo() {
   const { scale, height } = useFit();
   const giver = useRef<HTMLIFrameElement>(null);
   const receiver = useRef<HTMLIFrameElement>(null);
+
+  // The blob's tuning (T) lives on this page; both phones follow it.
+  useEffect(() => {
+    const send = () => {
+      for (const f of [giver.current, receiver.current]) f?.contentWindow?.postMessage({ type: DEMO_LOOK, look: lookStore.get() }, '*');
+    };
+    const onReady = (e: MessageEvent) => e.data === DEMO_READY && send();
+    window.addEventListener('message', onReady);
+    const stop = lookStore.subscribe(send);
+    return () => {
+      window.removeEventListener('message', onReady);
+      stop();
+    };
+  }, [id]);
 
   // Hand both frames the ends of one channel once both have asked for it.
   useEffect(() => {
@@ -71,7 +86,7 @@ export function Demo() {
         </button>
       </header>
       <p className="demo-lead">
-        Drag on the receiver’s phone — the giver’s screen follows. Double-click (or double-tap) = <b>right there</b>.
+        Drag on the receiver’s phone — the giver’s screen follows. Double-click (or double-tap) = <b>right there</b>. Press <kbd>T</kbd> to tune the blob.
       </p>
       <div className="demo-phones" style={{ gap: GAP * scale }}>
         <figure>

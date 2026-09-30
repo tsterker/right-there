@@ -9,6 +9,7 @@ import { describeNudge } from '../../../shared/nudge';
 import { classify, regionName } from '../../../shared/regions';
 import { BackMap, type MapHandle } from '../../components/BackMap';
 import { StatusBar } from '../../components/StatusBar';
+import { openTuner } from '../../components/LookTuner';
 import { Sheet, Toast } from '../../components/ui';
 import { useActions, useSession } from '../../lib/connection';
 import { inDemo } from '../../lib/demo';
@@ -108,6 +109,9 @@ export function GiverLive() {
         <h4>Cues</h4>
         <VoiceToggle />
         <div className="sheet-grid">
+          <button className="btn" onClick={() => (setMenu(false), openTuner())}>
+            ✦ Tune the blob (T)
+          </button>
           <button className="btn" onClick={() => (setMenu(false), conn.swapRoles())}>
             ⇄ Swap roles
           </button>

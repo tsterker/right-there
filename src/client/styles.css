@@ -904,6 +904,65 @@ label.slider input {
 .banner-good {
   background: #a42d67;
 }
+/* ---------- blob tuner (T) ---------- */
+
+.tuner {
+  position: fixed;
+  z-index: 60;
+  right: 12px;
+  bottom: calc(12px + var(--safe-bottom, 0px));
+  width: min(340px, calc(100vw - 24px));
+  max-height: 70dvh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(20, 25, 34, 0.94);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+}
+.tuner-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.tuner-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.tuner-presets .btn {
+  flex: 1;
+  white-space: nowrap;
+  padding-inline: 8px;
+}
+.tuner-row {
+  display: grid;
+  grid-template-columns: 92px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.tuner-row output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.tuner-keys {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tuner kbd,
+.demo-lead kbd {
+  font: inherit;
+  font-size: 0.85em;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
 /* ---------- demo ---------- */
 
 .demo {

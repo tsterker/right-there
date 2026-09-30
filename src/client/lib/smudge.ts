@@ -11,16 +11,20 @@ export interface Smudge {
   v: Vec;
 }
 
-/** Stiffness and damping: settles in about a second with a hint of give; trails ~0.33 s behind a moving spot. */
-const K = 30;
-const C = 10;
+export interface Spring {
+  stiffness: number;
+  damping: number;
+}
+
+/** Settles in about a second with a hint of give; trails ~0.33 s (damping / stiffness) behind a moving spot. */
+export const SPRING: Spring = { stiffness: 30, damping: 10 };
 
 export const restingAt = (p: Vec): Smudge => ({ mass: { ...p }, v: { x: 0, y: 0 } });
 
 /** Advance by `dt` seconds toward `head`; the mass never trails more than `leash` behind. */
-export function stepSmudge(s: Smudge, head: Vec, dt: number, leash: number): Smudge {
-  const ax = K * (head.x - s.mass.x) - C * s.v.x;
-  const ay = K * (head.y - s.mass.y) - C * s.v.y;
+export function stepSmudge(s: Smudge, head: Vec, dt: number, leash: number, { stiffness: k, damping: c }: Spring = SPRING): Smudge {
+  const ax = k * (head.x - s.mass.x) - c * s.v.x;
+  const ay = k * (head.y - s.mass.y) - c * s.v.y;
   const v = { x: s.v.x + ax * dt, y: s.v.y + ay * dt };
   let mass = { x: s.mass.x + v.x * dt, y: s.mass.y + v.y * dt };
   const back = sub(mass, head);

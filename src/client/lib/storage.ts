@@ -27,7 +27,8 @@ export function saveJSON(key: string, value: unknown) {
  * A tiny persisted store: localStorage-backed value shared by all components
  * on the page (and kept in sync across tabs via the storage event).
  */
-export function persisted<T extends object>(key: string, defaults: T) {
+/** `save`: whether a change is saved right now (else it stays in memory). */
+export function persisted<T extends object>(key: string, defaults: T, save: () => boolean = () => true) {
   let value = loadJSON<T>(key, defaults);
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((l) => l());
@@ -41,7 +42,7 @@ export function persisted<T extends object>(key: string, defaults: T) {
     get: () => value,
     set(update: Partial<T> | ((v: T) => T)) {
       value = typeof update === 'function' ? update(value) : { ...value, ...update };
-      saveJSON(key, value);
+      if (save()) saveJSON(key, value);
       emit();
     },
     subscribe(l: () => void) {

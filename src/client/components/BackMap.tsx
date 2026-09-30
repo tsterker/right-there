@@ -23,6 +23,7 @@ import {
   VERTEBRAE,
 } from '../../shared/body';
 import { apply, clamp, len, MIRROR_X, mul, rotation, smoothPath, sub, transpose, type Mat2, type Vec } from '../../shared/geometry';
+import { useLook } from '../lib/look';
 import { restingAt, stepSmudge, stirring, type Smudge } from '../lib/smudge';
 
 export interface MapHandle {
@@ -136,8 +137,6 @@ const SPOT_R = 6.4;
 const HAND_R = SPOT_R * 0.75;
 /** Circles strung from the blob's mass to its core; the goo filter melts them into one shape. */
 const BEADS = 7;
-/** The tail is drawn longer than the mass really trails, so a small nudge still shows. */
-const TAIL_GAIN = 1.6;
 
 /** The latest stroke seen, so its ping plays out after the finger lifts (the id is only set while it's down). */
 function usePing(ping: string | null | undefined): string | null {
@@ -150,33 +149,57 @@ function usePing(ping: string | null | undefined): string | null {
  * The spot: a hot core where it is, in a soft blob about the size of a palm
  * (where the hands roughly are, not a point). The blob's mass follows the
  * core on a spring, so a nudge pulls it into a smudge from where it was toward
- * where it is; then it catches up and rounds again. Drawn imperatively, one
- * frame at a time, while anything moves.
+ * where it is, with a tip running ahead of the core so even a small move
+ * shows its direction; then it catches up and rounds again. The look is
+ * tunable (see lib/look.ts). Drawn imperatively, one frame at a time, while
+ * anything moves.
  */
 function Goo({ at, smooth, r, uid, active, ping }: { at: Vec; smooth: boolean; r: number; uid: string; active: boolean; ping?: string | null }) {
   const pinged = usePing(ping);
   const core = useRef<SVGGElement>(null);
   const beads = useRef<(SVGCircleElement | null)[]>([]);
+  const tipRef = useRef<SVGPathElement>(null);
   const sim = useRef<{ head: Vec; smudge: Smudge } | null>(null);
+  const [look] = useLook();
+  const tuned = useRef(look);
+  tuned.current = look;
   useLayoutEffect(() => {
     const s = (sim.current ??= { head: { ...at }, smudge: restingAt(at) });
     const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const put = (el: SVGCircleElement | null, p: Vec, radius: number) => {
+      el?.setAttribute('cx', `${f2(p.x)}`);
+      el?.setAttribute('cy', `${f2(p.y)}`);
+      el?.setAttribute('r', `${f2(radius)}`);
+    };
     const draw = () => {
+      const { tail, stretch, point } = tuned.current;
       const { head } = s;
       const lag = sub(s.smudge.mass, head);
-      const reach = Math.min(len(lag) * TAIL_GAIN, 2.4 * r);
       const l = len(lag);
-      const mass = l > 0 ? { x: head.x + (lag.x / l) * reach, y: head.y + (lag.y / l) * reach } : head;
+      const reach = Math.min(l * tail, stretch * r);
+      // Unit vector the way it's going (away from the mass).
+      const ahead = l > 0 ? { x: -lag.x / l, y: -lag.y / l } : { x: 0, y: 0 };
+      const mass = { x: head.x - ahead.x * reach, y: head.y - ahead.y * reach };
       core.current?.setAttribute('transform', `translate(${f2(head.x)} ${f2(head.y)})`);
       // Stretched out, the mass thins (it's the same blob, spread over more length).
       const shrink = clamp(1 - reach / (5 * r), 0.62, 1);
-      beads.current.forEach((el, i) => {
-        if (!el) return;
+      for (let i = 0; i < BEADS; i++) {
         const t = i / (BEADS - 1);
-        el.setAttribute('cx', `${f2(mass.x + (head.x - mass.x) * t)}`);
-        el.setAttribute('cy', `${f2(mass.y + (head.y - mass.y) * t)}`);
-        el.setAttribute('r', `${f2(r * (shrink + (0.6 - shrink) * t))}`);
-      });
+        put(beads.current[i], { x: mass.x + (head.x - mass.x) * t, y: mass.y + (head.y - mass.y) * t }, r * (shrink + (0.6 - shrink) * t));
+      }
+      // The tip: a cone off the head, so the blob comes to a point the way it's going. Full
+      // length as soon as the move is noticeable, so small nudges point too.
+      const tip = point * r * clamp(reach / (0.25 * r), 0, 1);
+      if (tip < 0.05) tipRef.current?.setAttribute('d', '');
+      else {
+        const w = r * 0.55;
+        const side = { x: -ahead.y * w, y: ahead.x * w };
+        const apex = { x: head.x + ahead.x * (r * 0.6 + tip), y: head.y + ahead.y * (r * 0.6 + tip) };
+        tipRef.current?.setAttribute(
+          'd',
+          `M${f2(head.x + side.x)} ${f2(head.y + side.y)}L${f2(apex.x)} ${f2(apex.y)}L${f2(head.x - side.x)} ${f2(head.y - side.y)}Z`,
+        );
+      }
     };
     let raf = 0;
     let last = performance.now();
@@ -185,7 +208,8 @@ function Goo({ at, smooth, r, uid, active, ping }: { at: Vec; smooth: boolean; r
       last = t;
       const g = smooth ? 1 - Math.exp((-dt * 1000) / 70) : 1;
       s.head = { x: s.head.x + (at.x - s.head.x) * g, y: s.head.y + (at.y - s.head.y) * g };
-      s.smudge = still ? restingAt(s.head) : stepSmudge(s.smudge, s.head, dt, (2.4 * r) / TAIL_GAIN);
+      const look = tuned.current;
+      s.smudge = still ? restingAt(s.head) : stepSmudge(s.smudge, s.head, dt, (look.stretch * r) / look.tail, look);
       draw();
       if (Math.abs(at.x - s.head.x) + Math.abs(at.y - s.head.y) > 0.02 || stirring(s.smudge, s.head)) raf = requestAnimationFrame(step);
     };
@@ -199,6 +223,7 @@ function Goo({ at, smooth, r, uid, active, ping }: { at: Vec; smooth: boolean; r
         {Array.from({ length: BEADS }, (_, i) => (
           <circle key={i} ref={(el) => void (beads.current[i] = el)} r={r} />
         ))}
+        <path ref={tipRef} />
       </g>
       <g ref={core} className="map-spot-core">
         {pinged && <circle key={pinged} r={r} className="map-ping" />}
@@ -246,6 +271,8 @@ export function BackMap(props: BackMapProps) {
     [inv],
   );
 
+  const [look] = useLook();
+
   const labelY = crop === 'torso' ? -5 : -7;
   const labels = [
     { t: 'L', p: apply(m, { x: -24.5, y: labelY }) },
@@ -264,8 +291,8 @@ export function BackMap(props: BackMapProps) {
       <defs>
         {/* Melts overlapping circles into one soft-edged blob. */}
         <filter id={`${uid}-goo`} x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="soft" />
-          <feColorMatrix in="soft" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6" result="blob" />
+          <feGaussianBlur in="SourceGraphic" stdDeviation={look.goo} result="soft" />
+          <feColorMatrix in="soft" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -5" result="blob" />
           <feGaussianBlur in="blob" stdDeviation="0.9" />
         </filter>
         <radialGradient id={`${uid}-hot`}>

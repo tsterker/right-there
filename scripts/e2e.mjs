@@ -256,6 +256,12 @@ try {
   await gx.locator('.banner-good').waitFor({ timeout: 5000 });
   check(true, 'dragging on the receiver moves the giver’s dot; double-click = right there');
   await shot(desk, 'demo');
+  await desk.keyboard.press('t');
+  await desk.locator('.tuner').waitFor({ timeout: 3000 });
+  await desk.keyboard.press('3');
+  const stiffness = await desk.locator('.tuner-row output').first().innerText();
+  await desk.keyboard.press('Escape');
+  check((await desk.locator('.tuner').count()) === 0 && stiffness === '16', `T opens the blob tuner, 3 picks “Gooey” (catch-up ${stiffness}), Esc closes it`);
   const saved = await desk.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mb.')));
   check(saved.length === 0, `the demo leaves this device’s saved settings alone (${saved.join(', ') || 'nothing saved'})`);
   await rx.getByRole('button', { name: 'More' }).click();

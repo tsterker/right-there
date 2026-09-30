@@ -5,7 +5,7 @@
  * auto-tuned over time from overshoot/undershoot patterns.
  */
 import { screenToBody, type Orientation } from './calibration.ts';
-import { angleBetween, apply, clamp, len, type Vec } from './geometry.ts';
+import { angleBetween, apply, clamp, len, sub, type Vec } from './geometry.ts';
 
 /** CSS pixels per physical centimetre on typical phones (≈160 CSS px per inch). */
 export const PX_PER_CM = 63;
@@ -163,15 +163,37 @@ export function describeNudge(d: Vec, bothSidesAt?: number): string | null {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+export interface RecentMove {
+  /** Which way the spot is going (body cm; its length means little). */
+  d: Vec;
+  /** How fast it's moving right now (cm/s). */
+  speed: number;
+}
+
 /**
- * Where the spot went over the last `windowMs` of a stroke (body cm), so the
- * cue follows a change of mind mid-drag rather than the whole stroke. Samples
- * oldest first; null while it barely moved (the finger paused).
+ * Which way the spot is going, from stroke samples (oldest first). The
+ * direction runs back from the latest sample to one at least `minCm` away, so
+ * a slow drag's jitter averages out, but no further back than `maxMs`, so a
+ * change of direction shows within about a centimetre or so. The speed only looks
+ * at the last `speedMs`. Null before there's a move.
  */
-export function recentMove(samples: { p: Vec; t: number }[], windowMs = 250): Vec | null {
+export function recentMove(samples: { p: Vec; t: number }[], minCm = 1.2, maxMs = 800, speedMs = 200): RecentMove | null {
   const last = samples[samples.length - 1];
-  const base = samples.find((q) => q !== last && last.t - q.t <= windowMs) ?? samples[samples.length - 2];
-  if (!last || !base) return null;
-  const d = { x: last.p.x - base.p.x, y: last.p.y - base.p.y };
-  return len(d) < 0.3 ? null : d;
+  if (!last) return null;
+  let base: { p: Vec; t: number } | null = null;
+  for (let i = samples.length - 2; i >= 0; i--) {
+    const q = samples[i];
+    if (last.t - q.t > maxMs) break;
+    base = q;
+    if (len(sub(last.p, q.p)) >= minCm) break;
+  }
+  // Sparse updates: the previous sample, however old.
+  base ??= samples[samples.length - 2] ?? null;
+  if (!base) return null;
+  const d = sub(last.p, base.p);
+  if (len(d) < 0.4) return null;
+  const recent = samples.find((q) => last.t - q.t <= speedMs) ?? base;
+  const dt = last.t - recent.t;
+  const speed = recent === last ? 0 : dt > 0 ? (len(sub(last.p, recent.p)) / dt) * 1000 : 0;
+  return { d, speed };
 }

@@ -111,21 +111,34 @@ describe('describeNudge', () => {
 });
 
 describe('recentMove', () => {
-  const at = (x: number, t: number) => ({ p: { x, y: 0 }, t });
+  const at = (x: number, t: number, y = 0) => ({ p: { x, y }, t });
   it('follows a change of direction mid-stroke', () => {
     const left = [at(0, 0), at(-3, 100), at(-6, 200), at(-8, 300)];
-    expect(recentMove(left)!.x).toBeLessThan(0);
+    expect(recentMove(left)!.d.x).toBeLessThan(0);
     // Still left of the start, but heading right now.
     const back = [...left, at(-7, 400), at(-5, 500)];
-    expect(recentMove(back)!.x).toBeGreaterThan(0);
+    expect(recentMove(back)!.d.x).toBeGreaterThan(0);
   });
 
-  it('is null while the finger pauses or before there is a move', () => {
-    expect(recentMove([at(0, 0), at(3, 100), at(3.1, 400), at(3.1, 600)])).toBeNull();
+  it('holds steady on a slow drag with sideways jitter', () => {
+    // Up at 1.5 cm/s, wobbling ±1.5 mm sideways every 40 ms.
+    const slow = Array.from({ length: 40 }, (_, i) => at(i % 2 ? 0.15 : -0.15, i * 40, -0.06 * i));
+    for (let n = 20; n <= slow.length; n++) {
+      const { d } = recentMove(slow.slice(0, n))!;
+      expect(Math.abs((Math.atan2(d.x, -d.y) * 180) / Math.PI)).toBeLessThan(20);
+    }
+  });
+
+  it('knows the speed right now, and that a pause is slow', () => {
+    const fast = [at(0, 0), at(2, 40), at(4, 80), at(6, 120)];
+    expect(recentMove(fast)!.speed).toBeCloseTo(50, 0);
+    const paused = [at(0, 0), at(3, 100), at(3.05, 400), at(3.05, 600)];
+    expect(recentMove(paused)!.d.x).toBeGreaterThan(0);
+    expect(recentMove(paused)!.speed).toBeLessThan(0.5);
     expect(recentMove([at(0, 0)])).toBeNull();
   });
 
-  it('uses the last two samples when updates are sparse', () => {
-    expect(recentMove([at(0, 0), at(4, 900)])).toEqual({ x: 4, y: 0 });
+  it('uses the previous sample when updates are sparse', () => {
+    expect(recentMove([at(0, 0), at(4, 900)])!.d).toEqual({ x: 4, y: 0 });
   });
 });

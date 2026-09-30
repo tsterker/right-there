@@ -37,7 +37,7 @@ export interface BackMapProps {
   smooth?: boolean;
   trail?: Vec[];
   /** Where the current nudge is going (body cm): the spot smudges that way. A new `id` (a new stroke) pings. */
-  heading?: { d: Vec; id: string; live: boolean } | null;
+  heading?: { d: Vec; speed: number; id: string; live: boolean } | null;
   /** Also draw the spot mirrored across the spine (working both sides). */
   bothSides?: boolean;
   dim?: boolean;
@@ -141,8 +141,15 @@ interface SpotProps {
   smooth: boolean;
   m: Mat2;
   /** Where the current nudge is going, in view space (cm). */
-  heading: { d: Vec; id: string; live: boolean } | null;
+  heading: { d: Vec; speed: number; id: string; live: boolean } | null;
   uid: string;
+}
+
+/** An angle (deg) that turns the short way round to each new value (CSS eases the turn); holds while null. */
+function useTurn(target: number | null): number {
+  const angle = useRef(target ?? 0);
+  if (target !== null) angle.current += ((((target - angle.current) % 360) + 540) % 360) - 180;
+  return angle.current;
 }
 
 /**
@@ -183,11 +190,11 @@ function Spot({ target, smooth, m, heading, uid }: SpotProps) {
   const unpinged = useRef(heading?.id ?? null);
   const live = heading?.live ?? false;
   // Stretch along the heading with the back edge in place, so the smudge leads the spot.
-  const k = live ? 1 + clamp(0.25 + len(heading!.d) * 0.1, 0.3, 0.65) : 1;
-  const deg = heading ? f2((Math.atan2(heading.d.y, heading.d.x) * 180) / Math.PI) : 0;
+  const k = live ? 1 + clamp(0.25 + heading!.speed * 0.025, 0.3, 0.65) : 1;
+  const deg = useTurn(heading ? (Math.atan2(heading.d.y, heading.d.x) * 180) / Math.PI : null);
   return (
     <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      <g transform={`rotate(${deg})`}>
+      <g className="map-turn" style={{ transform: `rotate(${f2(deg)}deg)` }}>
         {heading && heading.id !== unpinged.current && <circle key={heading.id} r={SPOT_R} className="map-ping" />}
         <g className="map-cloud">
           <ellipse
@@ -262,7 +269,8 @@ function HandsPair({ target, smooth, heading, uid }: { target: { pos: Vec; activ
   const down = useRef(true);
   if (showSpread) apart.current = spread > 0;
   if (showVert) down.current = d.y > 0;
-  const ky = showVert ? 1 + clamp(0.25 + Math.abs(d.y) * 0.1, 0.3, 0.6) : 1;
+  const vertSpeed = mag > 0 ? ((heading?.speed ?? 0) * Math.abs(d.y)) / mag : 0;
+  const ky = showVert ? 1 + clamp(0.25 + vertSpeed * 0.025, 0.3, 0.6) : 1;
   const vs = down.current ? 1 : -1;
   const edge = w + HAND_R;
   const cores = w < 1 ? [0] : [-w, w];

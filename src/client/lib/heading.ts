@@ -6,6 +6,8 @@ import type { Target } from '../../shared/session';
 export interface Heading {
   /** Which way the spot is going right now (body cm). */
   d: Vec;
+  /** How fast (cm/s). */
+  speed: number;
   /** One per stroke. */
   id: string;
   /** The finger is still moving. */
@@ -27,14 +29,13 @@ export function useHeading(target: Target | null): Heading | null {
     const t = performance.now();
     if (stroke.current?.id !== id) stroke.current = { id, samples: [{ p: from, t: t - 1 }] };
     const s = stroke.current;
-    s.samples = [...s.samples.filter((q) => t - q.t < 600), { p: target.pos, t }];
-    const d = recentMove(s.samples);
+    s.samples = [...s.samples.filter((q) => t - q.t < 1000), { p: target.pos, t }];
+    const move = recentMove(s.samples);
     setHeading((prev) => {
       const same = prev?.id === id ? prev : null;
-      if (!target.active) return same ? { ...same, live: false } : d ? { d, id, live: false } : null;
-      // A pause keeps the last direction instead of flickering.
-      const dir = d ?? same?.d ?? sub(target.pos, from);
-      return { d: dir, id, live: true };
+      if (!target.active) return same ? { ...same, live: false } : move ? { ...move, id, live: false } : null;
+      // Before a clear direction, the stroke so far.
+      return { d: move?.d ?? same?.d ?? sub(target.pos, from), speed: move?.speed ?? 0, id, live: true };
     });
   }, [target]);
   return heading;

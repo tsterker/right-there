@@ -453,6 +453,10 @@ label.slider input {
   fill: #ffd9c7;
   opacity: 0.9;
 }
+/* Turns ease in rather than snap. */
+.map-turn {
+  transition: transform 0.12s ease-out;
+}
 /* The smudge follows the finger quickly, then eases back into a round cloud once it lifts. */
 .map-smudge,
 .map-smudge-tip {

@@ -1,12 +1,14 @@
 /**
  * Tune the blob live: a floating panel over the map. T toggles it anywhere;
- * while open, 1/2/3 pick a preset, R resets, Esc closes. Inside the demo's
+ * while open, 1/2/3 pick a preset, 4 your own ("Mine": the last look tuned by
+ * hand, kept so you can flip between it and a preset), R resets, Esc closes. Inside the demo's
  * phones, keys and the menu button go to the page around them, whose panel
  * tunes both phones.
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { inDemo } from '../lib/demo';
-import { DEFAULT_LOOK, LOOK_PRESETS, LOOK_RANGES, lookStore, useLook } from '../lib/look';
+import { usePersisted } from '../lib/storage';
+import { DEFAULT_LOOK, LOOK_PRESETS, LOOK_RANGES, lookStore, mineStore, sameLook, useLook, type Look } from '../lib/look';
 
 /** Demo frame → demo page: a tuner key was pressed (or the menu asked for the panel). */
 export const DEMO_KEY = 'right-there-demo-key';
@@ -23,7 +25,7 @@ const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.del
 function press(key: string): boolean {
   const k = key.toLowerCase();
   if (inDemo) {
-    if (k !== 't' && !(open && ['1', '2', '3', 'r', 'escape'].includes(k))) return false;
+    if (k !== 't' && !(open && ['1', '2', '3', '4', 'r', 'escape'].includes(k))) return false;
     window.parent.postMessage({ type: DEMO_KEY, key: k }, '*');
     return true;
   }
@@ -31,7 +33,10 @@ function press(key: string): boolean {
   else if (!open) return false;
   else if (k === 'escape') setOpen(false);
   else if (k === 'r') lookStore.set(DEFAULT_LOOK);
-  else if (LOOK_PRESETS[Number(k) - 1]) lookStore.set(LOOK_PRESETS[Number(k) - 1].look);
+  else if (k === '4') {
+    const mine = mineStore.get().look;
+    if (mine) lookStore.set(mine);
+  } else if (LOOK_PRESETS[Number(k) - 1]) lookStore.set(LOOK_PRESETS[Number(k) - 1].look);
   else return false;
   return true;
 }
@@ -45,6 +50,13 @@ const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isConte
 export function LookTuner() {
   const isOpen = useSyncExternalStore(subscribe, () => open);
   const [look, set] = useLook();
+  const [{ look: mine }] = usePersisted(mineStore);
+  // Moving a slider makes (and keeps) your own look.
+  const tweak = (update: Partial<Look>) => {
+    const next = { ...lookStore.get(), ...update };
+    set(next);
+    mineStore.set({ look: next });
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -73,20 +85,23 @@ export function LookTuner() {
       </header>
       <div className="tuner-presets">
         {LOOK_PRESETS.map((p, i) => (
-          <button key={p.name} className="btn small" onClick={() => set(p.look)}>
+          <button key={p.name} className={`btn small${sameLook(look, p.look) ? ' is-on' : ''}`} onClick={() => set(p.look)}>
             <kbd>{i + 1}</kbd> {p.name}
           </button>
         ))}
+        <button className={`btn small${mine && sameLook(look, mine) ? ' is-on' : ''}`} disabled={!mine} onClick={() => mine && set(mine)} title="Your last hand-tuned look">
+          <kbd>4</kbd> Mine
+        </button>
       </div>
       {LOOK_RANGES.map((r) => (
         <label key={r.key} className="tuner-row" title={r.hint}>
           <span>{r.label}</span>
-          <input type="range" min={r.min} max={r.max} step={r.step} value={look[r.key]} onChange={(e) => set({ [r.key]: Number(e.target.value) })} />
+          <input type="range" min={r.min} max={r.max} step={r.step} value={look[r.key]} onChange={(e) => tweak({ [r.key]: Number(e.target.value) })} />
           <output>{look[r.key]}</output>
         </label>
       ))}
       <p className="tuner-keys">
-        <kbd>T</kbd> show/hide · <kbd>1</kbd>–<kbd>3</kbd> presets · <kbd>R</kbd> reset · <kbd>Esc</kbd> close
+        <kbd>T</kbd> show/hide · <kbd>1</kbd>–<kbd>4</kbd> looks (flip to compare) · <kbd>R</kbd> reset · <kbd>Esc</kbd> close
       </p>
     </aside>
   );

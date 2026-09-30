@@ -187,9 +187,10 @@ function Goo({ at, smooth, r, uid, active, ping }: { at: Vec; smooth: boolean; r
         const t = i / (BEADS - 1);
         put(beads.current[i], { x: mass.x + (head.x - mass.x) * t, y: mass.y + (head.y - mass.y) * t }, r * (shrink + (0.6 - shrink) * t));
       }
-      // The tip: a cone off the head, so the blob comes to a point the way it's going. Full
-      // length as soon as the move is noticeable, so small nudges point too.
-      const tip = point * r * clamp(reach / (0.25 * r), 0, 1);
+      // The tip: a cone off the head, so the blob comes to a point the way it's going. Near
+      // full length as soon as the blob lags at all, so even a tiny nudge points.
+      const ramp = clamp(reach / (0.1 * r), 0, 1);
+      const tip = point * r * ramp * (2 - ramp);
       if (tip < 0.05) tipRef.current?.setAttribute('d', '');
       else {
         const w = r * 0.55;
@@ -227,7 +228,7 @@ function Goo({ at, smooth, r, uid, active, ping }: { at: Vec; smooth: boolean; r
       </g>
       <g ref={core} className="map-spot-core">
         {pinged && <circle key={pinged} r={r} className="map-ping" />}
-        <circle r={r * 0.5} className="map-hot" fill={`url(#${uid}-hot)`} />
+        <circle r={r * look.core} className="map-hot" fill={`url(#${uid}-hot)`} />
       </g>
     </g>
   );

@@ -18,14 +18,17 @@ export interface Look {
   point: number;
   /** How much the circles melt together (blur, cm). */
   goo: number;
+  /** The hot core's size, in blob radii. */
+  core: number;
 }
 
-export const DEFAULT_LOOK: Look = { stiffness: 30, damping: 10, tail: 1.6, stretch: 2.4, point: 1.1, goo: 1.6 };
+/** Snappy, with a pronounced tip. */
+export const DEFAULT_LOOK: Look = { stiffness: 60, damping: 14, tail: 1.3, stretch: 2, point: 1.6, goo: 1.3, core: 0.3 };
 
 export const LOOK_PRESETS: { name: string; look: Look }[] = [
-  { name: 'Snappy', look: { stiffness: 60, damping: 14, tail: 1.3, stretch: 2, point: 1.2, goo: 1.3 } },
-  { name: 'Default', look: DEFAULT_LOOK },
-  { name: 'Gooey', look: { stiffness: 16, damping: 6, tail: 2.2, stretch: 3.2, point: 0.9, goo: 2.2 } },
+  { name: 'Snappy', look: DEFAULT_LOOK },
+  { name: 'Soft', look: { stiffness: 30, damping: 10, tail: 1.6, stretch: 2.4, point: 1.1, goo: 1.6, core: 0.4 } },
+  { name: 'Gooey', look: { stiffness: 16, damping: 6, tail: 2.2, stretch: 3.2, point: 0.9, goo: 2.2, core: 0.4 } },
 ];
 
 export const LOOK_RANGES: { key: keyof Look; label: string; min: number; max: number; step: number; hint: string }[] = [
@@ -35,11 +38,20 @@ export const LOOK_RANGES: { key: keyof Look; label: string; min: number; max: nu
   { key: 'stretch', label: 'Max stretch', min: 1, max: 4, step: 0.1, hint: 'Longest tail, in blob radii' },
   { key: 'point', label: 'Point', min: 0, max: 2, step: 0.05, hint: 'Tip ahead of the core while moving' },
   { key: 'goo', label: 'Blobbiness', min: 0.6, max: 3, step: 0.1, hint: 'How much the shape melts together' },
+  { key: 'core', label: 'Core size', min: 0.12, max: 0.6, step: 0.02, hint: 'The hot dot where the spot is' },
 ];
 
 /** Tuning on the demo page stays in memory, like the demo's other settings. */
 export const lookStore = persisted<Look>('mb.look', DEFAULT_LOOK, () => !/^#\/?demo\b/.test(location.hash));
 export const useLook = () => usePersisted(lookStore);
+
+/** The last look tuned by hand ("Mine"), kept apart from the presets so the two can be compared. */
+export const mineStore = persisted<{ look: Look | null }>('mb.lookMine', { look: null }, () => !/^#\/?demo\b/.test(location.hash));
+
+export const sameLook = (a: Look, b: Look) => (Object.keys(a) as (keyof Look)[]).every((k) => a[k] === b[k]);
+
+// A look tuned before "Mine" existed becomes Mine, so picking a preset doesn't lose it.
+if (!mineStore.get().look && !LOOK_PRESETS.some((p) => sameLook(p.look, lookStore.get()))) mineStore.set({ look: lookStore.get() });
 
 /** Demo page → frames, with the look to use. */
 export const DEMO_LOOK = 'right-there-demo-look';

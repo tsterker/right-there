@@ -932,10 +932,16 @@ label.slider input {
   gap: 6px;
   margin-bottom: 8px;
 }
+.tuner-presets {
+  flex-wrap: wrap;
+}
 .tuner-presets .btn {
-  flex: 1;
+  flex: 1 1 40%;
   white-space: nowrap;
   padding-inline: 8px;
+}
+.tuner-presets .btn.is-on {
+  border-color: var(--accent);
 }
 .tuner-row {
   display: grid;

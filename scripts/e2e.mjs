@@ -131,9 +131,9 @@ try {
   check((await iphone.locator('.toast').innerText()).includes('Both sides'), 'two-finger tap: both sides on the phone and the Mac');
   await shot(mac, 'mac-both-sides');
   // The spot is right of the spine. A stroke starting on the left half, moving left, spreads the hands.
-  // How far apart the hands are drawn: each hand's dot sits in a group moved to ±w.
+  // How far apart the hands are drawn: each hand's hot core is moved to ±w.
   const spread = () =>
-    mac.evaluate(() => Math.max(0, ...[...document.querySelectorAll('.map-dot-core')].map((c) => Math.abs(c.parentElement.transform.baseVal.consolidate()?.matrix.e ?? 0))));
+    mac.evaluate(() => Math.max(0, ...[...document.querySelectorAll('.map-spot-core')].map((c) => Math.abs(c.transform.baseVal.consolidate()?.matrix.e ?? 0))));
   const w0 = await spread();
   const [a, b] = [await onMap(iphone, '.touchpad', -9, 22), await onMap(iphone, '.touchpad', -15, 22)];
   await touchDrag(iphone, a, b, 500);

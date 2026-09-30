@@ -412,14 +412,6 @@ label.slider input {
 .map-c7 {
   fill: #6d778c;
 }
-.map-trail {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.1;
-  stroke-opacity: 0.45;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
 .map-crest {
   fill: none;
   stroke: #465062;
@@ -441,52 +433,29 @@ label.slider input {
   stop-color: var(--accent);
   stop-opacity: 0;
 }
-.map-cloud {
+.map-goo {
+  fill: var(--accent);
+  opacity: 0.38;
+}
+.map-dot.is-active .map-goo {
+  opacity: 0.46;
+}
+/* The hot core: where the spot is. It beats faster while the finger moves. */
+.map-hot {
   transform-box: fill-box;
   transform-origin: center;
   animation: breathe 2.4s ease-in-out infinite;
 }
-.map-dot.is-active .map-cloud {
+.map-dot.is-active .map-hot {
   animation-duration: 0.8s;
 }
-.map-dot-core {
-  fill: #ffd9c7;
-  opacity: 0.9;
-}
-/* Turns ease in rather than snap. */
-.map-turn {
-  transition: transform 0.12s ease-out;
-}
-.map-turn.is-flip {
-  transition: none;
-}
-/* The smudge follows the finger quickly, then eases back into a round blob once it lifts. */
-.map-smudge,
-.map-blob-head {
-  transition:
-    transform 0.8s ease-in-out 0.25s,
-    opacity 0.6s ease-in 0.25s;
-}
-.map-smudge.is-live,
-.map-blob-head.is-live {
-  transition:
-    transform 0.15s ease-out,
-    opacity 0.15s ease-out;
-}
-/* The hot head: resting, it's the blob's warm centre; on the move, it leads. */
-.map-blob-head {
-  opacity: 0.55;
-}
-.map-blob-head.is-live {
-  opacity: 1;
-}
 .map-hot-a {
-  stop-color: var(--accent-2);
-  stop-opacity: 0.85;
+  stop-color: #ffe6d8;
+  stop-opacity: 1;
 }
 .map-hot-b {
-  stop-color: var(--accent);
-  stop-opacity: 0.35;
+  stop-color: var(--accent-2);
+  stop-opacity: 0.85;
 }
 .map-hot-c {
   stop-color: var(--accent);
@@ -1097,7 +1066,7 @@ label.slider input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-cloud,
+  .map-hot,
   .pulse,
   .conn.is-reconnecting,
   .act-teach,

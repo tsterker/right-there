@@ -16,15 +16,7 @@ import { navigate } from '../../lib/router';
 import { useGiverSettings } from '../../lib/settings';
 import { say, unlockSpeech } from '../../lib/speech';
 import { useNow } from '../../lib/time';
-import { useHeading } from '../../lib/heading';
-import { useTrail } from '../../lib/trail';
 import { ViewpointPicker, VoiceToggle } from './common';
-
-/**
- * How long a nudge keeps pointing after the finger lifts. Short, so the map
- * stays snappy: a giver who missed it gets the next nudge.
- */
-const NUDGE_MS = 1200;
 
 export function GiverLive() {
   const { state, dispatch, now, conn } = useSession();
@@ -33,12 +25,10 @@ export function GiverLive() {
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const mapRef = useRef<MapHandle>(null);
-  const t = useNow(250, now);
+  const t = useNow(500, now);
   const target = state.target;
-  const trail = useTrail(target);
-  const heading = useHeading(target);
-  // A nudge points while the finger moves, then settles back quickly.
-  const nudge = heading && target && (heading.live || t - target.at < NUDGE_MS) ? heading : null;
+  // Each nudge stroke (one per start point) pings once as it starts.
+  const stroke = target?.source === 'nudge' && target.active && target.from ? `${target.from.x},${target.from.y}` : null;
   const region = target ? classify(target.pos) : null;
   const good = state.good && t - state.good.at < 4000 ? state.good : null;
   // A "right there" on a spot the receiver touched in map mode can teach their map.
@@ -81,8 +71,7 @@ export function GiverLive() {
             handle={mapRef}
             target={target}
             smooth
-            trail={trail}
-            heading={nudge}
+            ping={stroke}
             bothSides={state.bothSides != null}
           />
           {!target && <div className="map-overlay-hint soft">Waiting for them to point…</div>}

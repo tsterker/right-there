@@ -4,7 +4,7 @@
  * lies (receiver) or where the giver stands. The spot and the side labels
  * are placed in view space so labels stay upright.
  */
-import { memo, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { memo, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, type Ref } from 'react';
 import {
   DRAW_BOUNDS,
   HEAD,
@@ -22,7 +22,8 @@ import {
   TORSO_OUTLINE,
   VERTEBRAE,
 } from '../../shared/body';
-import { apply, clamp, len, MIRROR_X, mul, rotation, smoothPath, transpose, type Mat2, type Vec } from '../../shared/geometry';
+import { apply, clamp, len, MIRROR_X, mul, rotation, smoothPath, sub, transpose, type Mat2, type Vec } from '../../shared/geometry';
+import { restingAt, stepSmudge, stirring, type Smudge } from '../lib/smudge';
 
 export interface MapHandle {
   /** Client (CSS px) → body cm. */
@@ -33,11 +34,10 @@ export interface BackMapProps {
   angle?: number;
   mirrored?: boolean;
   target?: { pos: Vec; active: boolean } | null;
-  /** Glide the dot toward new positions instead of jumping (network jitter). */
+  /** Glide the spot toward new positions instead of jumping (network jitter). */
   smooth?: boolean;
-  trail?: Vec[];
-  /** Where the current nudge is going (body cm): the spot smudges that way. A new `id` (a new stroke) pings. */
-  heading?: { d: Vec; speed: number; id: string; live: boolean } | null;
+  /** The current nudge stroke's id: each new one pings once. */
+  ping?: string | null;
   /** Also draw the spot mirrored across the spine (working both sides). */
   bothSides?: boolean;
   dim?: boolean;
@@ -133,166 +133,101 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
 });
 
 const SPOT_R = 6.4;
+const HAND_R = SPOT_R * 0.75;
+/** Circles strung from the blob's mass to its core; the goo filter melts them into one shape. */
+const BEADS = 7;
+/** The tail is drawn longer than the mass really trails, so a small nudge still shows. */
+const TAIL_GAIN = 1.6;
 
-interface Move {
-  /** Direction (any length). */
-  d: Vec;
-  /** cm/s */
-  speed: number;
-  live: boolean;
+/** The latest stroke seen, so its ping plays out after the finger lifts (the id is only set while it's down). */
+function usePing(ping: string | null | undefined): string | null {
+  const last = useRef<string | null>(null);
+  if (ping) last.current = ping;
+  return last.current;
 }
 
 /**
- * An angle (deg) that turns the short way round to each new value (CSS eases
- * the turn); holds while null. A near reversal flips instead (`flip`): turning
- * through the side would point somewhere the spot isn't going.
+ * The spot: a hot core where it is, in a soft blob about the size of a palm
+ * (where the hands roughly are, not a point). The blob's mass follows the
+ * core on a spring, so a nudge pulls it into a smudge from where it was toward
+ * where it is; then it catches up and rounds again. Drawn imperatively, one
+ * frame at a time, while anything moves.
  */
-function useTurn(target: number | null): { deg: number; flip: boolean } {
-  const angle = useRef(target ?? 0);
-  let flip = false;
-  if (target !== null) {
-    const delta = ((((target - angle.current) % 360) + 540) % 360) - 180;
-    flip = Math.abs(delta) > 150;
-    angle.current += delta;
-  }
-  return { deg: angle.current, flip };
-}
-
-/**
- * A soft blob about the size of a palm: where the hands roughly are, not a
- * point. While a nudge moves it, it smudges like a snail: the body stretches
- * the way it's going (further for faster moves) and a hot head runs ahead.
- * When the finger lifts, the head slides back in and the blob rounds again.
- */
-function Blob({ r, move, uid, reach = 1 }: { r: number; move: Move | null; uid: string; reach?: number }) {
-  const { deg, flip } = useTurn(move ? (Math.atan2(move.d.y, move.d.x) * 180) / Math.PI : null);
-  const live = move?.live ?? false;
-  // How far it smudges, in radii: further for faster moves.
-  const k = live ? reach * clamp(0.9 + move!.speed * 0.03, 1, 1.5) : 0;
-  const lead = k * r;
-  const cls = live ? ' is-live' : '';
+function Goo({ at, smooth, r, uid, active, ping }: { at: Vec; smooth: boolean; r: number; uid: string; active: boolean; ping?: string | null }) {
+  const pinged = usePing(ping);
+  const core = useRef<SVGGElement>(null);
+  const beads = useRef<(SVGCircleElement | null)[]>([]);
+  const sim = useRef<{ head: Vec; smudge: Smudge } | null>(null);
+  useLayoutEffect(() => {
+    const s = (sim.current ??= { head: { ...at }, smudge: restingAt(at) });
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const draw = () => {
+      const { head } = s;
+      const lag = sub(s.smudge.mass, head);
+      const reach = Math.min(len(lag) * TAIL_GAIN, 2.4 * r);
+      const l = len(lag);
+      const mass = l > 0 ? { x: head.x + (lag.x / l) * reach, y: head.y + (lag.y / l) * reach } : head;
+      core.current?.setAttribute('transform', `translate(${f2(head.x)} ${f2(head.y)})`);
+      // Stretched out, the mass thins (it's the same blob, spread over more length).
+      const shrink = clamp(1 - reach / (5 * r), 0.62, 1);
+      beads.current.forEach((el, i) => {
+        if (!el) return;
+        const t = i / (BEADS - 1);
+        el.setAttribute('cx', `${f2(mass.x + (head.x - mass.x) * t)}`);
+        el.setAttribute('cy', `${f2(mass.y + (head.y - mass.y) * t)}`);
+        el.setAttribute('r', `${f2(r * (shrink + (0.6 - shrink) * t))}`);
+      });
+    };
+    let raf = 0;
+    let last = performance.now();
+    const step = (t: number) => {
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      const g = smooth ? 1 - Math.exp((-dt * 1000) / 70) : 1;
+      s.head = { x: s.head.x + (at.x - s.head.x) * g, y: s.head.y + (at.y - s.head.y) * g };
+      s.smudge = still ? restingAt(s.head) : stepSmudge(s.smudge, s.head, dt, (2.4 * r) / TAIL_GAIN);
+      draw();
+      if (Math.abs(at.x - s.head.x) + Math.abs(at.y - s.head.y) > 0.02 || stirring(s.smudge, s.head)) raf = requestAnimationFrame(step);
+    };
+    draw();
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [at.x, at.y, smooth, r]);
   return (
-    <g className={`map-turn${flip ? ' is-flip' : ''}`} style={{ transform: `rotate(${f2(deg)}deg)` }}>
-      <g className="map-cloud">
-        <ellipse
-          rx={r}
-          ry={r}
-          className={`map-smudge${cls}`}
-          fill={`url(#${uid}-cloud)`}
-          style={{ transform: `translateX(${f2(lead * 0.5)}px) scale(${f2(1 + k * 0.75)}, ${f2(1 - k * 0.12)})` }}
-        />
-        <circle r={r * 0.6} className={`map-blob-head${cls}`} fill={`url(#${uid}-hot)`} style={{ transform: `translateX(${f2(lead * 1.05)}px)` }} />
+    <g className={active ? 'map-dot is-active' : 'map-dot'}>
+      <g className="map-goo" filter={`url(#${uid}-goo)`}>
+        {Array.from({ length: BEADS }, (_, i) => (
+          <circle key={i} ref={(el) => void (beads.current[i] = el)} r={r} />
+        ))}
+      </g>
+      <g ref={core} className="map-spot-core">
+        {pinged && <circle key={pinged} r={r} className="map-ping" />}
+        <circle r={r * 0.5} className="map-hot" fill={`url(#${uid}-hot)`} />
       </g>
     </g>
   );
 }
 
-interface SpotProps {
-  target: { pos: Vec; active: boolean };
-  smooth: boolean;
-  m: Mat2;
-  /** Where the current nudge is going, in view space (cm). */
-  heading: { d: Vec; speed: number; id: string; live: boolean } | null;
-  uid: string;
-}
-
-/** The spot: a blob that nudges smudge, and a ping as each stroke starts. */
-function Spot({ target, smooth, m, heading, uid }: SpotProps) {
-  const ref = useRef<SVGGElement>(null);
-  const cur = useRef<Vec | null>(null);
-  const { x, y } = apply(m, target.pos);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const put = (p: Vec) => el.setAttribute('transform', `translate(${f2(p.x)} ${f2(p.y)})`);
-    if (!smooth || !cur.current) {
-      cur.current = { x, y };
-      put(cur.current);
-      return;
-    }
-    let raf = 0;
-    let last = performance.now();
-    const step = (t: number) => {
-      const c = cur.current!;
-      const k = 1 - Math.exp(-(t - last) / 70);
-      last = t;
-      c.x += (x - c.x) * k;
-      c.y += (y - c.y) * k;
-      put(c);
-      if (Math.abs(x - c.x) + Math.abs(y - c.y) > 0.05) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [x, y, smooth]);
-  // Only a stroke that starts while the spot is shown pings (not a twin appearing, nor a reconnect).
-  const unpinged = useRef(heading?.id ?? null);
-  return (
-    <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      {heading && heading.id !== unpinged.current && <circle key={heading.id} r={SPOT_R} className="map-ping" />}
-      <Blob r={SPOT_R} move={heading} uid={uid} />
-      <circle r={1.1} className="map-dot-core" />
-    </g>
-  );
-}
-
-const HAND_R = SPOT_R * 0.75;
-
-/** Follow `v` smoothly (network jitter), re-rendering each frame until it arrives. */
-function useGlide(v: Vec, smooth: boolean): Vec {
-  const [cur, setCur] = useState(v);
-  const at = useRef(v);
-  useEffect(() => {
-    if (!smooth) {
-      at.current = v;
-      setCur(v);
-      return;
-    }
-    let raf = 0;
-    let last = performance.now();
-    const step = (t: number) => {
-      const c = at.current;
-      const k = 1 - Math.exp(-(t - last) / 70);
-      last = t;
-      const done = Math.abs(v.x - c.x) + Math.abs(v.y - c.y) < 0.05;
-      at.current = done ? v : { x: c.x + (v.x - c.x) * k, y: c.y + (v.y - c.y) * k };
-      setCur(at.current);
-      if (!done) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [v.x, v.y, smooth]);
-  return cur;
-}
-
 /**
- * Both sides: one shape in body space, centred on the spine: a blob for each
- * hand, joined by a faint bridge. Each blob smudges its own way, mirrored, so
- * a nudge apart pulls them outward and one upward pulls both up.
+ * Both sides: a blob for each hand, mirrored across the spine and joined by a
+ * faint bridge; each smudges its own way. Drawn in body space.
  */
-function HandsPair({ target, smooth, heading, uid }: { target: { pos: Vec; active: boolean }; smooth: boolean; heading: BackMapProps['heading']; uid: string }) {
-  const { x: w, y } = useGlide({ x: Math.abs(target.pos.x), y: target.pos.y }, smooth);
-  const unpinged = useRef(heading?.id ?? null);
-  const steered = target.pos.x < 0 ? -1 : 1;
-  // Each hand's move: the steered one's, mirrored for the other side.
-  const moveOf = (side: number): Move | null => (heading ? { ...heading, d: { x: heading.d.x * side * steered, y: heading.d.y } } : null);
+function HandsPair({ target, smooth, uid, ping }: { target: { pos: Vec; active: boolean }; smooth: boolean; uid: string; ping?: string | null }) {
+  const w = Math.abs(target.pos.x);
+  const { y } = target.pos;
   const hands = w < 1 ? [0] : [-1, 1];
   return (
-    <g transform={`translate(0 ${f2(y)})`} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      {heading && heading.id !== unpinged.current && <ellipse key={heading.id} rx={w + HAND_R} ry={HAND_R} className="map-ping" />}
-      {w >= 1 && <ellipse rx={w} ry={HAND_R * 0.7} className="map-bridge" fill={`url(#${uid}-cloud)`} />}
+    <g>
+      {w >= 1 && <ellipse cx={0} cy={y} rx={w} ry={HAND_R * 0.6} className="map-bridge" fill={`url(#${uid}-cloud)`} />}
       {hands.map((side) => (
-        <g key={side} transform={`translate(${f2(side * w)} 0)`}>
-          {/* Half the reach: close together, a hand's smudge would run past the other hand. */}
-          <Blob r={HAND_R} move={side === 0 ? heading ?? null : moveOf(side)} uid={uid} reach={0.5} />
-          <circle r={1.1} className="map-dot-core" />
-        </g>
+        <Goo key={side} at={{ x: side * w, y }} smooth={smooth} r={HAND_R} uid={uid} active={target.active} ping={ping} />
       ))}
     </g>
   );
 }
 
 export function BackMap(props: BackMapProps) {
-  const { angle = 0, mirrored = false, target, smooth = false, trail, heading, bothSides = false, dim, crop = 'full', handle } = props;
+  const { angle = 0, mirrored = false, target, smooth = false, ping, bothSides = false, dim, crop = 'full', handle } = props;
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const m = useMemo(() => viewMatrix(angle, mirrored), [angle, mirrored]);
   const inv = useMemo(() => transpose(m), [m]);
@@ -311,9 +246,6 @@ export function BackMap(props: BackMapProps) {
     [inv],
   );
 
-  const spotHeading = heading && len(heading.d) > 0.3 ? { ...heading, d: apply(m, heading.d) } : null;
-  const line = (pts: Vec[]) => pts.map((p) => `${f2(p.x)},${f2(p.y)}`).join(' ');
-
   const labelY = crop === 'torso' ? -5 : -7;
   const labels = [
     { t: 'L', p: apply(m, { x: -24.5, y: labelY }) },
@@ -330,6 +262,12 @@ export function BackMap(props: BackMapProps) {
       aria-label="Map of the back"
     >
       <defs>
+        {/* Melts overlapping circles into one soft-edged blob. */}
+        <filter id={`${uid}-goo`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="soft" />
+          <feColorMatrix in="soft" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6" result="blob" />
+          <feGaussianBlur in="blob" stdDeviation="0.9" />
+        </filter>
         <radialGradient id={`${uid}-hot`}>
           <stop offset="0%" className="map-hot-a" />
           <stop offset="55%" className="map-hot-b" />
@@ -343,12 +281,10 @@ export function BackMap(props: BackMapProps) {
       </defs>
       <g transform={`matrix(${m[0]} ${m[2]} ${m[1]} ${m[3]} 0 0)`}>
         <Anatomy uid={uid} />
-        {trail && trail.length > 1 && <polyline points={line(trail)} className="map-trail" />}
-        {bothSides && trail && trail.length > 1 && <polyline points={line(trail.map((p) => ({ x: -p.x, y: p.y })))} className="map-trail" />}
-        {bothSides && target && <HandsPair target={target} smooth={smooth} heading={heading} uid={uid} />}
+        {bothSides && target && <HandsPair target={target} smooth={smooth} uid={uid} ping={ping} />}
       </g>
       <g className="map-view">
-        {!bothSides && target && <Spot target={target} smooth={smooth} m={m} heading={spotHeading} uid={uid} />}
+        {!bothSides && target && <Goo at={apply(m, target.pos)} smooth={smooth} r={SPOT_R} uid={uid} active={target.active} ping={ping} />}
         {labels.map((l) => (
           <g key={l.t} transform={`translate(${f2(l.p.x)} ${f2(l.p.y)})`} className="map-side-label">
             <circle r={2.6} />

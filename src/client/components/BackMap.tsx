@@ -133,8 +133,59 @@ const Anatomy = memo(function Anatomy({ uid }: { uid: string }) {
 });
 
 const SPOT_R = 6.4;
-/** A soft arrowhead pointing along +x. */
-const CHEVRON = 'M-2.4 -3.6 L0.6 0 L-2.4 3.6';
+
+interface Move {
+  /** Direction (any length). */
+  d: Vec;
+  /** cm/s */
+  speed: number;
+  live: boolean;
+}
+
+/**
+ * An angle (deg) that turns the short way round to each new value (CSS eases
+ * the turn); holds while null. A near reversal flips instead (`flip`): turning
+ * through the side would point somewhere the spot isn't going.
+ */
+function useTurn(target: number | null): { deg: number; flip: boolean } {
+  const angle = useRef(target ?? 0);
+  let flip = false;
+  if (target !== null) {
+    const delta = ((((target - angle.current) % 360) + 540) % 360) - 180;
+    flip = Math.abs(delta) > 150;
+    angle.current += delta;
+  }
+  return { deg: angle.current, flip };
+}
+
+/**
+ * A soft blob about the size of a palm: where the hands roughly are, not a
+ * point. While a nudge moves it, it smudges like a snail: the body stretches
+ * the way it's going (further for faster moves) and a hot head runs ahead.
+ * When the finger lifts, the head slides back in and the blob rounds again.
+ */
+function Blob({ r, move, uid, reach = 1 }: { r: number; move: Move | null; uid: string; reach?: number }) {
+  const { deg, flip } = useTurn(move ? (Math.atan2(move.d.y, move.d.x) * 180) / Math.PI : null);
+  const live = move?.live ?? false;
+  // How far it smudges, in radii: further for faster moves.
+  const k = live ? reach * clamp(0.9 + move!.speed * 0.03, 1, 1.5) : 0;
+  const lead = k * r;
+  const cls = live ? ' is-live' : '';
+  return (
+    <g className={`map-turn${flip ? ' is-flip' : ''}`} style={{ transform: `rotate(${f2(deg)}deg)` }}>
+      <g className="map-cloud">
+        <ellipse
+          rx={r}
+          ry={r}
+          className={`map-smudge${cls}`}
+          fill={`url(#${uid}-cloud)`}
+          style={{ transform: `translateX(${f2(lead * 0.5)}px) scale(${f2(1 + k * 0.75)}, ${f2(1 - k * 0.12)})` }}
+        />
+        <circle r={r * 0.6} className={`map-blob-head${cls}`} fill={`url(#${uid}-hot)`} style={{ transform: `translateX(${f2(lead * 1.05)}px)` }} />
+      </g>
+    </g>
+  );
+}
 
 interface SpotProps {
   target: { pos: Vec; active: boolean };
@@ -145,20 +196,7 @@ interface SpotProps {
   uid: string;
 }
 
-/** An angle (deg) that turns the short way round to each new value (CSS eases the turn); holds while null. */
-function useTurn(target: number | null): number {
-  const angle = useRef(target ?? 0);
-  if (target !== null) angle.current += ((((target - angle.current) % 360) + 540) % 360) - 180;
-  return angle.current;
-}
-
-/**
- * The spot: a soft cloud about the size of a palm, because it is where the
- * hands roughly are, not a point. While a nudge moves it, the cloud smudges
- * toward where it's going (further for faster moves) behind a faint
- * arrowhead, and pings once as the stroke starts. When the finger lifts, it
- * eases back into a round cloud.
- */
+/** The spot: a blob that nudges smudge, and a ping as each stroke starts. */
 function Spot({ target, smooth, m, heading, uid }: SpotProps) {
   const ref = useRef<SVGGElement>(null);
   const cur = useRef<Vec | null>(null);
@@ -188,30 +226,10 @@ function Spot({ target, smooth, m, heading, uid }: SpotProps) {
   }, [x, y, smooth]);
   // Only a stroke that starts while the spot is shown pings (not a twin appearing, nor a reconnect).
   const unpinged = useRef(heading?.id ?? null);
-  const live = heading?.live ?? false;
-  // Stretch along the heading with the back edge in place, so the smudge leads the spot.
-  const k = live ? 1 + clamp(0.25 + heading!.speed * 0.025, 0.3, 0.65) : 1;
-  const deg = useTurn(heading ? (Math.atan2(heading.d.y, heading.d.x) * 180) / Math.PI : null);
   return (
     <g ref={ref} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      <g className="map-turn" style={{ transform: `rotate(${f2(deg)}deg)` }}>
-        {heading && heading.id !== unpinged.current && <circle key={heading.id} r={SPOT_R} className="map-ping" />}
-        <g className="map-cloud">
-          <ellipse
-            rx={SPOT_R}
-            ry={SPOT_R}
-            className={`map-smudge${live ? ' is-live' : ''}`}
-            fill={`url(#${uid}-cloud)`}
-            style={{ transform: `translateX(${f2((k - 1) * SPOT_R)}px) scaleX(${f2(k)})` }}
-          />
-        </g>
-        <path
-          d={CHEVRON}
-          className={`map-smudge-tip${live ? ' is-live' : ''}`}
-          filter={`url(#${uid}-blur)`}
-          style={{ transform: `translateX(${f2((2 * k - 1) * SPOT_R - 1.2)}px)` }}
-        />
-      </g>
+      {heading && heading.id !== unpinged.current && <circle key={heading.id} r={SPOT_R} className="map-ping" />}
+      <Blob r={SPOT_R} move={heading} uid={uid} />
       <circle r={1.1} className="map-dot-core" />
     </g>
   );
@@ -247,61 +265,27 @@ function useGlide(v: Vec, smooth: boolean): Vec {
 }
 
 /**
- * Both sides: one shared shape in body space, centred on the spine, with a
- * glow and a dot for each hand. Nudges show as shared cues: the ends point
- * apart or together, one chevron on the spine points up or down, and the
- * shape smudges that way.
+ * Both sides: one shape in body space, centred on the spine: a blob for each
+ * hand, joined by a faint bridge. Each blob smudges its own way, mirrored, so
+ * a nudge apart pulls them outward and one upward pulls both up.
  */
 function HandsPair({ target, smooth, heading, uid }: { target: { pos: Vec; active: boolean }; smooth: boolean; heading: BackMapProps['heading']; uid: string }) {
   const { x: w, y } = useGlide({ x: Math.abs(target.pos.x), y: target.pos.y }, smooth);
   const unpinged = useRef(heading?.id ?? null);
-  const live = heading?.live ?? false;
-  // Split the move into the hands' spread (+ apart) and up/down; show the parts that matter.
-  const d = heading?.d ?? { x: 0, y: 0 };
-  const spread = d.x * (target.pos.x < 0 ? -1 : 1);
-  const mag = Math.hypot(spread, d.y);
-  const shows = (c: number) => live && Math.abs(c) > 0.3 && Math.abs(c) >= mag * 0.35;
-  // Hands already together at the spine can't come closer.
-  const showSpread = shows(spread) && (spread > 0 || w > 1.5);
-  const showVert = shows(d.y);
-  // Chevrons keep their last direction while they fade out.
-  const apart = useRef(true);
-  const down = useRef(true);
-  if (showSpread) apart.current = spread > 0;
-  if (showVert) down.current = d.y > 0;
-  const vertSpeed = mag > 0 ? ((heading?.speed ?? 0) * Math.abs(d.y)) / mag : 0;
-  const ky = showVert ? 1 + clamp(0.25 + vertSpeed * 0.025, 0.3, 0.6) : 1;
-  const vs = down.current ? 1 : -1;
-  const edge = w + HAND_R;
-  const cores = w < 1 ? [0] : [-w, w];
+  const steered = target.pos.x < 0 ? -1 : 1;
+  // Each hand's move: the steered one's, mirrored for the other side.
+  const moveOf = (side: number): Move | null => (heading ? { ...heading, d: { x: heading.d.x * side * steered, y: heading.d.y } } : null);
+  const hands = w < 1 ? [0] : [-1, 1];
   return (
     <g transform={`translate(0 ${f2(y)})`} className={target.active ? 'map-dot is-active' : 'map-dot'}>
-      {heading && heading.id !== unpinged.current && <ellipse key={heading.id} rx={edge} ry={HAND_R} className="map-ping" />}
-      <g className="map-cloud">
-        <g className={`map-smudge${live ? ' is-live' : ''}`} style={{ transform: `translateY(${f2(vs * (ky - 1) * HAND_R)}px) scaleY(${f2(ky)})` }}>
-          {w >= 1 && <ellipse rx={w} ry={HAND_R * 0.7} className="map-bridge" fill={`url(#${uid}-cloud)`} />}
-          {cores.map((cx) => (
-            <circle key={cx === 0 ? 0 : Math.sign(cx)} cx={cx} r={HAND_R} fill={`url(#${uid}-cloud)`} />
-          ))}
+      {heading && heading.id !== unpinged.current && <ellipse key={heading.id} rx={w + HAND_R} ry={HAND_R} className="map-ping" />}
+      {w >= 1 && <ellipse rx={w} ry={HAND_R * 0.7} className="map-bridge" fill={`url(#${uid}-cloud)`} />}
+      {hands.map((side) => (
+        <g key={side} transform={`translate(${f2(side * w)} 0)`}>
+          {/* Half the reach: close together, a hand's smudge would run past the other hand. */}
+          <Blob r={HAND_R} move={side === 0 ? heading ?? null : moveOf(side)} uid={uid} reach={0.5} />
+          <circle r={1.1} className="map-dot-core" />
         </g>
-      </g>
-      {[-1, 1].map((side) => (
-        <path
-          key={side}
-          d={CHEVRON}
-          className={`map-smudge-tip${showSpread ? ' is-live' : ''}`}
-          filter={`url(#${uid}-blur)`}
-          style={{ transform: `scaleX(${side}) ${apart.current ? `translateX(${f2(edge - 1.2)}px)` : `translateX(${f2(edge + 2)}px) scaleX(-1)`}` }}
-        />
-      ))}
-      <path
-        d={CHEVRON}
-        className={`map-smudge-tip${showVert ? ' is-live' : ''}`}
-        filter={`url(#${uid}-blur)`}
-        style={{ transform: `translateY(${f2(vs * ((2 * ky - 1) * HAND_R - 1.2))}px) rotate(${vs * 90}deg)` }}
-      />
-      {cores.map((cx) => (
-        <circle key={cx === 0 ? 0 : Math.sign(cx)} cx={cx} r={1.1} className="map-dot-core" />
       ))}
     </g>
   );
@@ -346,9 +330,11 @@ export function BackMap(props: BackMapProps) {
       aria-label="Map of the back"
     >
       <defs>
-        <filter id={`${uid}-blur`} x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="0.6" />
-        </filter>
+        <radialGradient id={`${uid}-hot`}>
+          <stop offset="0%" className="map-hot-a" />
+          <stop offset="55%" className="map-hot-b" />
+          <stop offset="100%" className="map-hot-c" />
+        </radialGradient>
         <radialGradient id={`${uid}-cloud`}>
           <stop offset="0%" className="map-cloud-a" />
           <stop offset="45%" className="map-cloud-b" />

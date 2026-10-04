@@ -6,6 +6,9 @@
  * - Map mode: touch the spot on the picture; the correction model maps it to
  *   where it really is.
  * Double-tap anywhere = "right there". Two-finger tap = both sides on/off.
+ * Nudge mode, eyes-free pressure: hold still, then lift = firmer; a single
+ * tap = softer (once the double-tap window has passed). A hold that turns
+ * into a drag is just a nudge.
  * A haptic tick marks entering a new area.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -23,6 +26,12 @@ import { BackMap, type MapHandle } from './BackMap';
 const SEND_INTERVAL_MS = 40;
 /** Finger travel (px) before a touch counts as a drag; taps jitter by a few px. */
 const DEAD_ZONE_PX = 8;
+/** Longest touch that counts as a tap. */
+const TAP_MS = 300;
+/** A second tap within this window (after the first lifts) makes a double-tap. */
+const DOUBLE_TAP_MS = 380;
+/** Shortest still touch that counts as "firmer". */
+const HOLD_MS = 500;
 
 const near = (a: Vec, b: Vec) => Math.abs(a.x - b.x) < 0.15 && Math.abs(a.y - b.y) < 0.15;
 
@@ -57,6 +66,9 @@ export interface TouchPadProps {
   dispatch: (a: Action) => void;
   onRightThere?: () => void;
   onTwoFingerTap?: () => void;
+  /** Nudge mode: a still hold (lifted after HOLD_MS) / a single tap. */
+  onFirmer?: () => void;
+  onSofter?: () => void;
   /** Working both sides: the side we steer (nudges stop at the spine). */
   bothSides?: Side | null;
   onTune?: (tune: number, reason: 'overshoot' | 'undershoot') => void;
@@ -85,6 +97,8 @@ export function TouchPad(props: TouchPadProps) {
   /** Last settled spot we sent in nudge mode; only its echo may move our local spot. */
   const settled = useRef<Vec | null>(null);
   const lastTap = useRef({ at: 0, x: 0, y: 0 });
+  /** A single tap in nudge mode waits out the double-tap window, then means "softer". */
+  const softer = useRef<number | undefined>(undefined);
   const strokes = useRef<Stroke[]>([]);
   const region = useRef<string | null>(null);
   const p = useLatest(props);
@@ -119,7 +133,13 @@ export function TouchPad(props: TouchPadProps) {
     if (props.mode === 'nudge' && target) place(target.pos);
   }, [props.mode, p]);
 
-  useEffect(() => () => window.clearTimeout(sender.current.timer), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(sender.current.timer);
+      window.clearTimeout(softer.current);
+    },
+    [],
+  );
 
   const flush = () => {
     const s = sender.current;
@@ -270,7 +290,7 @@ export function TouchPad(props: TouchPadProps) {
     gesture.current = { kind: 'none' };
     setActive(false);
     const dur = e.timeStamp - g.startT;
-    const { mode, autoTune, tune, onTune, onRightThere } = p.current;
+    const { mode, autoTune, tune, onTune, onRightThere, onFirmer } = p.current;
     if (mode === 'nudge') {
       nudger.current.end();
       if (g.sent) {
@@ -292,14 +312,27 @@ export function TouchPad(props: TouchPadProps) {
     // Nothing sent (a tap in nudge mode): catch up with anything that arrived meanwhile.
     if (!g.sent) follow();
 
-    if (!cancelled && !g.moved && dur < 300) {
+    if (cancelled || g.moved) return;
+    if (dur < TAP_MS) {
       const tap = lastTap.current;
-      if (e.timeStamp - tap.at < 380 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 45) {
+      if (e.timeStamp - tap.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 45) {
         tap.at = 0;
+        window.clearTimeout(softer.current);
+        softer.current = undefined;
         onRightThere?.();
       } else {
         lastTap.current = { at: e.timeStamp, x: e.clientX, y: e.clientY };
+        window.clearTimeout(softer.current);
+        softer.current =
+          mode === 'nudge'
+            ? window.setTimeout(() => {
+                softer.current = undefined;
+                p.current.onSofter?.();
+              }, DOUBLE_TAP_MS)
+            : undefined;
       }
+    } else if (dur >= HOLD_MS && mode === 'nudge') {
+      onFirmer?.();
     }
   };
 

@@ -1,7 +1,7 @@
 /**
- * The giver's screen: where the hands should be. Glanceable (the map fills
- * the screen, the spot points and pings with each nudge), hands-free (spoken
- * cues), touchable with a knuckle (one big button).
+ * The giver's screen: where the hands should be, and how firmly. Glanceable
+ * (the map fills the screen, the spot points and pings with each nudge),
+ * hands-free (spoken cues), touchable with a knuckle (one big button).
  */
 import { useRef, useState } from 'react';
 import { sub } from '../../../shared/geometry';
@@ -10,7 +10,7 @@ import { classify, regionName } from '../../../shared/regions';
 import { BackMap, type MapHandle } from '../../components/BackMap';
 import { StatusBar } from '../../components/StatusBar';
 import { openTuner } from '../../components/LookTuner';
-import { Sheet, Toast } from '../../components/ui';
+import { PressureMeter, Sheet, Toast } from '../../components/ui';
 import { useActions, useSession } from '../../lib/connection';
 import { inDemo } from '../../lib/demo';
 import { navigate } from '../../lib/router';
@@ -31,7 +31,10 @@ export function GiverLive() {
   // Each nudge stroke (one per start point) pings once as it starts.
   const stroke = target?.source === 'nudge' && target.active && target.from ? `${target.from.x},${target.from.y}` : null;
   const region = target ? classify(target.pos) : null;
-  const good = state.good && t - state.good.at < 4000 ? state.good : null;
+  // One banner at a time: the receiver's latest "right there", "firmer" or "softer".
+  const asked = state.pressure.last;
+  const latest = asked && (!state.good || asked.at >= state.good.at) ? asked : state.good;
+  const banner = latest && t - latest.at < 4000 ? latest : null;
   // A "right there" on a spot the receiver touched in map mode can teach their map.
   const teach =
     state.good != null && t - state.good.at < 25_000 && target?.by === 'A' && target.source === 'map' && !target.active;
@@ -56,11 +59,18 @@ export function GiverLive() {
       </StatusBar>
 
       <div className="banner-slot">
-        {good && (
-          <div key={good.id} className="banner banner-good" role="status">
-            <strong>♥ Right there</strong>
-            <span>That’s the spot — stay here</span>
+        {banner && 'change' in banner ? (
+          <div key={banner.id} className={`banner banner-${banner.change}`} role="status">
+            <strong>{banner.change === 'firmer' ? '▲ Firmer' : '▼ Softer'}</strong>
+            <span>{banner.change === 'firmer' ? 'Press a little harder' : 'Ease off a little'}</span>
           </div>
+        ) : (
+          banner && (
+            <div key={banner.id} className="banner banner-good" role="status">
+              <strong>♥ Right there</strong>
+              <span>That’s the spot — stay here</span>
+            </div>
+          )
         )}
       </div>
 
@@ -78,6 +88,9 @@ export function GiverLive() {
           {!target && <div className="map-overlay-hint soft">Waiting for them to point…</div>}
           {anchoring && <div className="map-overlay-hint">Tap where your hands are now</div>}
           {state.bothSides && <div className="map-mode-chip">⇆ Both sides</div>}
+          <div key={asked?.id} className={`map-pressure-chip${asked ? ' is-new' : ''}`}>
+            <PressureMeter level={state.pressure.level} />
+          </div>
           <Toast id={toast?.id ?? null}>{toast?.text}</Toast>
         </div>
         {/* The map shows the area; its name is for screen readers (and spoken cues). */}
@@ -131,6 +144,10 @@ function useGiverVoice(voice: boolean) {
     if (!voice) return;
     if (a.type === 'good') {
       say('Right there.', 'high');
+      return;
+    }
+    if (a.type === 'pressure') {
+      say(a.change === 'firmer' ? 'Firmer.' : 'Softer.', 'high');
       return;
     }
     if (a.type === 'target' && !a.active && state.target) {

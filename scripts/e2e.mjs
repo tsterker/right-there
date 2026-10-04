@@ -2,7 +2,8 @@
  * End-to-end walkthrough in Chrome, no server involved: a "MacBook" opens the
  * built file from disk (file://) and starts as the giver; a "phone" joins over
  * a direct WebRTC link. Covers pairing (paste, and both cameras), the two setup
- * swipes, nudging, double-tap "right there", map mode learning, swapping roles,
+ * swipes, nudging, double-tap "right there", firmer/softer, map
+ * mode learning, swapping roles,
  * reconnecting and the demo. Finally the dev server's QR link for a phone.
  *
  *   npm run build && node scripts/e2e.mjs [--out /tmp/right-there-e2e]
@@ -13,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium, devices } from 'playwright-core';
 import { createServer } from 'vite';
-import { codeOf, mouseDrag, onMap, pair, setupSwipes, sleep, touchDrag, touchTaps, touchTwoFingerTap } from './drive.mjs';
+import { codeOf, mouseDrag, onMap, pair, setupSwipes, sleep, touchDrag, touchHold, touchTaps, touchTwoFingerTap } from './drive.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name, fallback) => {
@@ -126,6 +127,18 @@ try {
   await mac.waitForSelector('.banner-good', { timeout: 5000 });
   check((await mac.locator('.region-name').textContent()) === region, 'Mac shows "♥ Right there"; the double-tap did not move the spot');
   await shot(mac, 'mac-right-there');
+  const pressure = () => mac.locator('.pressure-meter').getAttribute('aria-label');
+  await sleep(500);
+  check((await pressure()) === 'Pressure 3 of 5', 'the double-tap was not also a "softer" tap');
+  await touchHold(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 });
+  await mac.waitForSelector('.banner-firmer', { timeout: 5000 });
+  check((await pressure()) === 'Pressure 4 of 5', 'hold still, then lift = firmer: the Mac shows it and the meter rises');
+  await shot(mac, 'mac-firmer');
+  await shot(iphone, 'phone-firmer');
+  await touchTaps(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 }, 1);
+  await mac.waitForSelector('.banner-softer', { timeout: 5000 });
+  check((await pressure()) === 'Pressure 3 of 5', 'a single tap = softer');
+  check((await mac.locator('.region-name').textContent()) === region, 'neither moved the spot');
   await touchTwoFingerTap(iphone, { x: pad.x + pad.width / 2, y: pad.y + pad.height / 2 });
   await mac.waitForSelector('.map-mode-chip', { timeout: 5000 });
   check((await iphone.locator('.toast').innerText()).includes('Both sides'), 'two-finger tap: both sides on the phone and the Mac');

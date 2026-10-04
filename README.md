@@ -2,13 +2,13 @@
 
 Show your partner where to massage, without saying a word.
 
-The **receiver** lies face down with their phone beside them and moves a finger to show where they want the hands. The **giver** sees the spot as a glow on a map of the back. Double-tap when it's *right there*.
+The **receiver** lies face down with their phone beside them and moves a finger to show where they want the hands, and how firmly. The **giver** sees the spot as a glow on a map of the back. Double-tap when it's *right there*.
 
 **Start at https://tsterker.github.io/right-there/** on the giver's screen; a laptop is perfect. *Try the demo* there shows both screens side by side, already connected. Prototype. There's no server: the two devices talk to each other directly over the Wi-Fi.
 
 | Pair | Receiver | Giver |
 | :-: | :-: | :-: |
-| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, smudged the way the nudge is going"> |
+| <img src="docs/pair.png" width="240" alt="Pairing: the receiver's phone shows its reply code to hold up to the giver's camera"> | <img src="docs/receiver.png" width="240" alt="Receiver: touch pad over a map of the back"> | <img src="docs/giver.png" width="240" alt="Giver: the spot on the map, smudged the way the nudge is going, and a meter for how firmly to press"> |
 
 ## How it works
 
@@ -19,8 +19,9 @@ The **receiver** lies face down with their phone beside them and moves a finger 
      - *Nudge*: drag anywhere, like on a trackpad. Slow drags are precise, quick ones travel far.
      - *Map*: touch the spot on the picture.
      - **Double-tap anywhere = right there.**
+     - **Hold = firmer, tap = softer** (nudge mode): keep a finger still for half a second, then lift, for firmer; a single tap for softer. Both work without looking: the phone vibrates long for firmer and short for softer (Android), and *Quietly say where the spot is* says the word. A hold that turns into a drag is just a nudge, and the tap waits out the double-tap, so neither gets in the way of pointing. In map mode, where a touch places the spot, use *− Softer* and *+ Firmer* beside *♥ Right there*.
      - **Two-finger tap = both sides** (experimental): one hand on each side of the spine. The giver sees a blob per hand, mirrored across the spine and joined by a faint bridge; each smudges its own way, so a nudge apart pulls them outward and one upward pulls both up. Where a drag starts picks the hand it steers: start on the right half of the back to lead with the right hand, on the left half for the left. Each hand stops at the spine; touching a spot in map mode steers that side. Tap again for one side.
-   - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the spot as a hot core in a palm-sized blob: roughly where the hands should be, not an exact point. The core is where the spot is; the blob follows it on a spring, so a nudge pulls it into a smudge from where it was toward where it's going, coming to a point that way, which catches up and rounds again within about a second. A nudge also pings as it starts. Press *T* (or *⋯ → Tune the blob*) to tune how the blob moves and looks: catch-up, damping, tail, stretch, point, blobbiness, core size. *1*–*3* pick presets and *4* your own (the last look you tuned by hand), so you can flip between them to compare. Optional spoken cues say it in words ("higher and to their right", the area's name). *I'm here* moves the spot to where the hands really are.
+   - **Giver:** chooses once where they're standing, so the map matches what they see. Then sees the spot as a hot core in a palm-sized blob: roughly where the hands should be, not an exact point. The core is where the spot is; the blob follows it on a spring, so a nudge pulls it into a smudge from where it was toward where it's going, coming to a point that way, which catches up and rounds again within about a second. A nudge also pings as it starts. Press *T* (or *⋯ → Tune the blob*) to tune how the blob moves and looks: catch-up, damping, tail, stretch, point, blobbiness, core size. *1*–*3* pick presets and *4* your own (the last look you tuned by hand), so you can flip between them to compare. Firmer and softer show as a banner, and a meter in the corner keeps the level (1–5, starting in the middle). Optional spoken cues say it in words ("higher and to their right", "firmer", the area's name). *I'm here* moves the spot to where the hands really are.
 
 - **Map mode learns.** After a double-tap on a spot touched in map mode, the giver taps *I'm here — teach map* and then taps where their hands are. The receiver's phone saves the pair and uses it to correct later touches.
 - **Swap roles:** *⋯ → Swap roles* keeps the same connection.

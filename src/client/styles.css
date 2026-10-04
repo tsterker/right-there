@@ -486,6 +486,51 @@ label.slider input {
   font-size: 14px;
   pointer-events: none;
 }
+.map-pressure-chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  background: rgba(20, 25, 34, 0.9);
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.map-pressure-chip.is-new {
+  animation: glow-warm 1.2s ease-out 2;
+}
+/* Rising bars, like signal strength: lit up to how firmly to press. */
+.pressure-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+}
+.pressure-meter i {
+  width: 5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.pressure-meter i:nth-child(1) {
+  height: 20%;
+}
+.pressure-meter i:nth-child(2) {
+  height: 40%;
+}
+.pressure-meter i:nth-child(3) {
+  height: 60%;
+}
+.pressure-meter i:nth-child(4) {
+  height: 80%;
+}
+.pressure-meter i:nth-child(5) {
+  height: 100%;
+}
+.pressure-meter i.is-on {
+  background: var(--accent);
+}
 .map-side-label circle {
   fill: var(--surface-2);
   stroke: var(--line);
@@ -764,6 +809,9 @@ label.slider input {
   color: var(--faint);
   pointer-events: none;
 }
+.pad-hint span {
+  display: block;
+}
 .pad-actions,
 .giver-actions {
   display: grid;
@@ -793,6 +841,13 @@ label.slider input {
 .act span {
   font-size: 26px;
   line-height: 1;
+}
+.pad-actions {
+  grid-template-columns: 1fr 2fr 1fr;
+}
+.act-press {
+  font-size: 14px;
+  color: var(--muted);
 }
 .act-good {
   background: rgba(255, 111, 168, 0.16);
@@ -903,6 +958,12 @@ label.slider input {
 }
 .banner-good {
   background: #a42d67;
+}
+.banner-firmer {
+  background: #a3501c;
+}
+.banner-softer {
+  background: #26637e;
 }
 /* ---------- blob tuner (T) ---------- */
 
@@ -1130,7 +1191,17 @@ label.slider input {
   }
 }
 
+@keyframes glow-warm {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 158, 94, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(255, 158, 94, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .map-pressure-chip,
   .map-hot,
   .pulse,
   .conn.is-reconnecting,

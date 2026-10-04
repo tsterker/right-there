@@ -86,7 +86,8 @@ export function Demo() {
         </button>
       </header>
       <p className="demo-lead">
-        Drag on the receiver’s phone — the giver’s screen follows. Double-click (or double-tap) = <b>right there</b>. Press <kbd>T</kbd> to tune the blob.
+        Drag on the receiver’s phone — the giver’s screen follows. Double-click (or double-tap) = <b>right there</b>; hold still = <b>firmer</b>,
+        one click = <b>softer</b>. Press <kbd>T</kbd> to tune the blob.
       </p>
       <div className="demo-phones" style={{ gap: GAP * scale }}>
         <figure>

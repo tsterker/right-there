@@ -41,7 +41,7 @@ export function VoiceToggle() {
           if (e.target.checked) say('Voice on. I will tell you where to go.', 'high');
         }}
       />
-      Spoken cues (“higher”, “right there”, area names)
+      Spoken cues (“higher”, “firmer”, “right there”, area names)
     </label>
   );
 }

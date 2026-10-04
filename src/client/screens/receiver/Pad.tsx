@@ -1,7 +1,11 @@
-/** Receiver during the massage: move a finger to show where; double-tap for "right there". */
+/**
+ * Receiver during the massage: move a finger to show where; double-tap for
+ * "right there"; hold for firmer, tap for softer.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_ORIENTATION } from '../../../shared/calibration';
 import { classify, regionName } from '../../../shared/regions';
+import { PRESSURE_LEVELS, type PressureChange } from '../../../shared/session';
 import { StatusBar } from '../../components/StatusBar';
 import { TouchPad } from '../../components/TouchPad';
 import { Segmented, Sheet, Toast } from '../../components/ui';
@@ -34,6 +38,15 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
     dispatch({ type: 'good' });
     haptic('double');
     note('♥ Right there');
+  };
+  const press = (change: PressureChange) => {
+    dispatch({ type: 'pressure', change });
+    haptic(change);
+    // The level this ask leads to (the shared copy updates once the host echoes it).
+    const level = Math.min(PRESSURE_LEVELS, Math.max(1, state.pressure.level + (change === 'firmer' ? 1 : -1)));
+    const word = change === 'firmer' ? 'Firmer' : 'Softer';
+    note(`${change === 'firmer' ? '▲' : '▼'} ${word} · ${level} of ${PRESSURE_LEVELS}`);
+    if (settings.speak) say(word, 'high', 0.45);
   };
   const setBothSides = (on: boolean) => {
     dispatch({ type: 'bothSides', on });
@@ -73,17 +86,28 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
         bothSides={state.bothSides}
         onRightThere={rightThere}
         onTwoFingerTap={() => setBothSides(state.bothSides == null)}
+        onFirmer={() => press('firmer')}
+        onSofter={() => press('softer')}
         onTune={(tune) => setProfile({ tune })}
       >
         <div className="pad-hint">
-          {profile.mode === 'nudge' ? 'Drag to move' : 'Touch the spot'} · double-tap = right there · two fingers = both sides
+          <span>{profile.mode === 'nudge' ? 'Drag to move · hold = firmer · tap = softer' : 'Touch the spot'}</span>
+          <span>double-tap = right there · two fingers = both sides</span>
         </div>
         <Toast id={toast?.id ?? null}>{toast?.text}</Toast>
       </TouchPad>
 
       <nav className="pad-actions">
+        <button className="act act-press" onClick={() => press('softer')}>
+          <span>−</span>
+          Softer
+        </button>
         <button className="act act-good" onClick={rightThere}>
           ♥ Right there
+        </button>
+        <button className="act act-press" onClick={() => press('firmer')}>
+          <span>+</span>
+          Firmer
         </button>
       </nav>
 

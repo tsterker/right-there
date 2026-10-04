@@ -16,6 +16,11 @@ export const ROLE_NAME: Record<Role, string> = { A: 'Receiver', B: 'Giver' };
 export type InputMode = 'nudge' | 'map';
 export type Side = 'left' | 'right';
 export type TargetSource = 'nudge' | 'map' | 'anchor';
+export type PressureChange = 'firmer' | 'softer';
+
+/** How firmly to press: a running tally of the receiver's asks, 1 (lightest) to 5 (firmest). */
+export const PRESSURE_LEVELS = 5;
+export const DEFAULT_PRESSURE = 3;
 
 export interface Target {
   pos: Vec;
@@ -41,6 +46,8 @@ export interface SessionState {
    * Null: one side. Otherwise the side of the spot the receiver steers; the mirror follows.
    */
   bothSides: Side | null;
+  /** How firmly to press, and the receiver's last ask (firmer/softer). */
+  pressure: { level: number; last: { id: string; at: number; change: PressureChange } | null };
   nextId: number;
 }
 
@@ -56,6 +63,8 @@ export type Action =
       learn?: boolean;
     }
   | { type: 'good' }
+  /** Firmer or softer. Asked at the end of the scale, it still tells the giver; the level stays put. */
+  | { type: 'pressure'; change: PressureChange }
   /** `side`: steer that hand from now on (a stroke started on that half of the back). */
   | { type: 'bothSides'; on: boolean; side?: Side };
 
@@ -75,6 +84,7 @@ export function initialState(code: string, now: number): SessionState {
     target: null,
     good: null,
     bothSides: null,
+    pressure: { level: DEFAULT_PRESSURE, last: null },
     nextId: 1,
   };
 }
@@ -106,6 +116,11 @@ export function reduce(s: SessionState, action: Action, meta: Meta): SessionStat
     }
     case 'good':
       return { ...s, nextId: s.nextId + 1, good: { id: `g${s.nextId}`, at, pos: s.target?.pos ?? null } };
+    case 'pressure': {
+      const step = action.change === 'firmer' ? 1 : -1;
+      const level = Math.min(PRESSURE_LEVELS, Math.max(1, s.pressure.level + step));
+      return { ...s, nextId: s.nextId + 1, pressure: { level, last: { id: `p${s.nextId}`, at, change: action.change } } };
+    }
     case 'bothSides': {
       if (!action.on) return { ...s, bothSides: null };
       if (!action.side) return { ...s, bothSides: sideOf(s.target?.pos.x ?? 0, 'right') };
@@ -146,6 +161,8 @@ export function sanitizeAction(raw: unknown, from: Role): Action | null {
     }
     case 'good':
       return from === 'A' ? { type: 'good' } : null;
+    case 'pressure':
+      return from === 'A' && (raw.change === 'firmer' || raw.change === 'softer') ? { type: 'pressure', change: raw.change } : null;
     case 'bothSides': {
       if (from !== 'A' || typeof raw.on !== 'boolean') return null;
       const action: Action = { type: 'bothSides', on: raw.on };

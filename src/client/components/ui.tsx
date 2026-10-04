@@ -1,6 +1,7 @@
 /** Small shared UI pieces. */
 import { useEffect, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
+import { PRESSURE_LEVELS } from '../../shared/session';
 
 export function QR({ text, size = 180, ecc = 'M', light = '#f4efe9' }: { text: string; size?: number; ecc?: 'L' | 'M'; light?: string }) {
   const [svg, setSvg] = useState('');
@@ -75,6 +76,17 @@ export function Toast({ id, children }: { id: string | number | null; children: 
     <div className="toast" key={id}>
       {children}
     </div>
+  );
+}
+
+/** How firmly to press: rising bars, lit up to the level. */
+export function PressureMeter({ level }: { level: number }) {
+  return (
+    <span className="pressure-meter" role="img" aria-label={`Pressure ${level} of ${PRESSURE_LEVELS}`}>
+      {Array.from({ length: PRESSURE_LEVELS }, (_, i) => (
+        <i key={i} className={i < level ? 'is-on' : undefined} />
+      ))}
+    </span>
   );
 }
 

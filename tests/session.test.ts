@@ -34,6 +34,27 @@ describe('reducer', () => {
     expect(run([[{ type: 'good' }, 'A', 1]]).good?.pos).toBeNull();
   });
 
+  it('steps the pressure within 1..5 and remembers the last ask, even at the end of the scale', () => {
+    expect(initialState('1234', 0).pressure).toEqual({ level: 3, last: null });
+    const firm = run([
+      [{ type: 'pressure', change: 'firmer' }, 'A', 1],
+      [{ type: 'pressure', change: 'firmer' }, 'A', 2],
+      [{ type: 'pressure', change: 'firmer' }, 'A', 3],
+    ]);
+    expect(firm.pressure).toEqual({ level: 5, last: { id: 'p3', at: 3, change: 'firmer' } });
+    const soft = run(
+      [
+        [{ type: 'pressure', change: 'softer' }, 'A', 4],
+        [{ type: 'good' }, 'A', 5],
+      ],
+      firm,
+    );
+    expect(soft.pressure).toEqual({ level: 4, last: { id: 'p4', at: 4, change: 'softer' } });
+    expect(soft.good?.id).toBe('g5');
+    const floor = run(Array.from({ length: 6 }, (_, i): [Action, Role, number] => [{ type: 'pressure', change: 'softer' }, 'A', i]));
+    expect(floor.pressure.level).toBe(1);
+  });
+
   it('works both sides from the side the spot is on; nudges stop at the spine', () => {
     expect(initialState('1234', 0).bothSides).toBeNull();
     const on = run([
@@ -82,6 +103,10 @@ describe('sanitizeAction', () => {
     expect(sanitizeAction({ type: 'bothSides', on: true, side: 'up' }, 'A')).toEqual({ type: 'bothSides', on: true });
     expect(sanitizeAction({ type: 'bothSides', on: true }, 'B')).toBeNull();
     expect(sanitizeAction({ type: 'presence', role: 'A', connected: true }, 'A')).toBeNull();
+    expect(sanitizeAction({ type: 'pressure', change: 'firmer', level: 9 }, 'A')).toEqual({ type: 'pressure', change: 'firmer' });
+    expect(sanitizeAction({ type: 'pressure', change: 'softer' }, 'A')).toEqual({ type: 'pressure', change: 'softer' });
+    expect(sanitizeAction({ type: 'pressure', change: 'harder' }, 'A')).toBeNull();
+    expect(sanitizeAction({ type: 'pressure', change: 'firmer' }, 'B')).toBeNull();
   });
 
   it('rejects malformed input and rounds positions', () => {

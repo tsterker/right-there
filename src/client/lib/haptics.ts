@@ -5,7 +5,7 @@
  */
 import { receiverSettings } from './settings';
 
-export type HapticKind = 'tick' | 'tap' | 'confirm' | 'double' | 'alert';
+export type HapticKind = 'tick' | 'tap' | 'confirm' | 'double' | 'alert' | 'firmer' | 'softer';
 
 const PATTERNS: Record<HapticKind, number | number[]> = {
   tick: 6,
@@ -13,6 +13,9 @@ const PATTERNS: Record<HapticKind, number | number[]> = {
   confirm: [18, 50, 18],
   double: [14, 70, 14],
   alert: [60, 50, 60, 50, 60],
+  // Felt apart without looking: a long press back for firmer, a light flick for softer.
+  firmer: 70,
+  softer: 8,
 };
 
 let iosSwitch: HTMLLabelElement | null = null;

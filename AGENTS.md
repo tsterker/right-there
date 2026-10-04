@@ -13,7 +13,7 @@ Tim ships fast: work on `main` in small commits and push each one as soon as it'
 
 ## Scope
 
-One job: navigating the back. Pressure feedback, massage tips, plans, timers, history and the relay server were cut on purpose and live in git history. Bring one back when Tim asks for it.
+One job: navigating the back, and how firmly (firmer/softer). Massage tips, plans, timers, history and the relay server were cut on purpose and live in git history. Bring one back when Tim asks for it.
 
 ## Constraints
 

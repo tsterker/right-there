@@ -34,8 +34,8 @@ export interface Link {
   close(): void;
 }
 
-/** How long an unconfirmed action stays worth (re)sending. "Right there" is only useful right away. */
-const maxAge = (a: Action) => (a.type === 'good' || a.type === 'target' ? 8_000 : 60_000);
+/** How long an unconfirmed action stays worth (re)sending. "Right there" and "firmer" are only useful right away. */
+const maxAge = (a: Action) => (a.type === 'good' || a.type === 'target' || a.type === 'pressure' ? 8_000 : 60_000);
 
 interface Pending {
   id: string;

@@ -2,7 +2,7 @@
  * End-to-end walkthrough in Chrome, no server involved: a "MacBook" opens the
  * built file from disk (file://) and starts as the giver; a "phone" joins over
  * a direct WebRTC link. Covers pairing (paste, and both cameras), the two setup
- * swipes, nudging, double-tap "right there", firmer/softer, map
+ * swipes, nudging, double-tap "right there", firmer/softer, full screen, map
  * mode learning, swapping roles,
  * reconnecting and the demo. Finally the dev server's QR link for a phone.
  *
@@ -61,6 +61,8 @@ const shot = async (page, name) => {
 const watch = (name, page) => {
   page.on('pageerror', (e) => problems.push(`[${name}] page error: ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && problems.push(`[${name}] console.error: ${m.text()}`));
+  // A session asks before the tab is closed or left; the walkthrough means it.
+  page.on('dialog', (d) => (d.type() === 'beforeunload' ? d.accept() : d.dismiss()));
   return page;
 };
 const laptop = async (name) => watch(name, await (await browser.newContext({ viewport: { width: 1280, height: 820 } })).newPage());
@@ -113,6 +115,10 @@ try {
   console.log('2. Phone: two swipes, then nudge');
   await setupSwipes(iphone, (p, a, b) => touchDrag(p, a, b, 500));
   check((await iphone.locator('.toast').innerText()).includes('toward your head'), 'swipes understood: phone top toward the head');
+  check(await iphone.evaluate(() => document.fullscreenElement != null), 'the session runs full screen from its first tap');
+  await iphone.evaluate(() => history.back());
+  await sleep(400);
+  check((await iphone.locator('.receiver-pad').count()) === 1, 'a stray back swipe stays in the session');
   check((await mac.locator('.region-name').textContent()) === 'No spot yet', 'Mac waits for the first pointing');
   await touchDrag(iphone, { x: 190, y: 420 }, { x: 250, y: 330 }, 900);
   await mac.waitForSelector('.map-ping', { timeout: 5000 });

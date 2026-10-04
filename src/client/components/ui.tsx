@@ -2,6 +2,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 import { PRESSURE_LEVELS } from '../../shared/session';
+import { fullscreenSupported, isStandalone, setFullscreen } from '../lib/fullscreen';
+import { inDemo } from '../lib/demo';
+import { useDeviceSettings } from '../lib/settings';
 
 export function QR({ text, size = 180, ecc = 'M', light = '#f4efe9' }: { text: string; size?: number; ecc?: 'L' | 'M'; light?: string }) {
   const [svg, setSvg] = useState('');
@@ -76,6 +79,26 @@ export function Toast({ id, children }: { id: string | number | null; children: 
     <div className="toast" key={id}>
       {children}
     </div>
+  );
+}
+
+/** The menu's full-screen switch; where pages can't go full screen (iPhone), how to get it anyway. */
+export function FullscreenToggle() {
+  const [settings] = useDeviceSettings();
+  if (inDemo || isStandalone) return null;
+  if (!fullscreenSupported) {
+    return (
+      <p className="hint">
+        No full screen in this browser. Add Right There to your Home Screen (Share → Add to Home Screen) and start it from
+        there.
+      </p>
+    );
+  }
+  return (
+    <label className="toggle">
+      <input type="checkbox" checked={settings.fullscreen} onChange={(e) => setFullscreen(e.target.checked)} />
+      Full screen (no browser bars to bump)
+    </label>
   );
 }
 

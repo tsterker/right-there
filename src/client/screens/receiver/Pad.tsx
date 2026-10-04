@@ -8,7 +8,7 @@ import { classify, regionName } from '../../../shared/regions';
 import { PRESSURE_LEVELS, type PressureChange } from '../../../shared/session';
 import { StatusBar } from '../../components/StatusBar';
 import { TouchPad } from '../../components/TouchPad';
-import { Segmented, Sheet, Toast } from '../../components/ui';
+import { FullscreenToggle, Segmented, Sheet, Toast } from '../../components/ui';
 import { useActions, useSession } from '../../lib/connection';
 import { haptic } from '../../lib/haptics';
 import { useCorrection, useProfile } from '../../lib/profile';
@@ -143,6 +143,7 @@ export function ReceiverPad({ notice, onRedoSetup }: { notice: Notice | null; on
           <input type="checkbox" checked={settings.dim} onChange={(e) => setSettings({ dim: e.target.checked })} />
           Extra dim screen
         </label>
+        <FullscreenToggle />
         <label className="toggle">
           <input type="checkbox" checked={settings.haptics} onChange={(e) => setSettings({ haptics: e.target.checked })} />
           Vibrate when the spot enters a new area

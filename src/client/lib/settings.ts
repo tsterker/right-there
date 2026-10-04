@@ -27,3 +27,12 @@ export const VIEWPOINTS: { angle: GiverSettings['viewAngle']; label: string; hin
   { angle: 90, label: 'At their right side', hint: 'Head to the right' },
   { angle: 180, label: 'At their head', hint: 'Head at the bottom' },
 ];
+
+/** This device, whichever role it plays. */
+export interface DeviceSettings {
+  /** Run sessions full screen where the browser allows it. */
+  fullscreen: boolean;
+}
+
+export const deviceSettings = persisted<DeviceSettings>('mb.settings.device', { fullscreen: true });
+export const useDeviceSettings = () => usePersisted(deviceSettings);

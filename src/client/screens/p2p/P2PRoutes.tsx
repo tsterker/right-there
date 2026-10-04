@@ -7,6 +7,7 @@ import { otherRole, ROLE_NAME, type Role } from '../../../shared/session';
 import { Loading, Sheet } from '../../components/ui';
 import { SessionConnection, SessionContext, useConnection, useSession } from '../../lib/connection';
 import { demoChannel, inDemo } from '../../lib/demo';
+import { useStayInSession } from '../../lib/fullscreen';
 import { navigate } from '../../lib/router';
 import { useKeepAwake } from '../../lib/wakeLock';
 import { ChannelLink, PeerHost } from '../../p2p/host';
@@ -17,6 +18,7 @@ import { GuestPairing, HostPairing, ReplyHandoff, ScanFirstCode } from './Pairin
 
 function SessionScreens() {
   const { role } = useSession();
+  useStayInSession();
   return role === 'A' ? <Receiver /> : <GiverLive />;
 }
 

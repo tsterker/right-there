@@ -10,7 +10,7 @@ import { classify, regionName } from '../../../shared/regions';
 import { BackMap, type MapHandle } from '../../components/BackMap';
 import { StatusBar } from '../../components/StatusBar';
 import { openTuner } from '../../components/LookTuner';
-import { PressureMeter, Sheet, Toast } from '../../components/ui';
+import { FullscreenToggle, PressureMeter, Sheet, Toast } from '../../components/ui';
 import { useActions, useSession } from '../../lib/connection';
 import { inDemo } from '../../lib/demo';
 import { navigate } from '../../lib/router';
@@ -121,6 +121,8 @@ export function GiverLive() {
         <ViewpointPicker onPicked={() => setMenu(false)} />
         <h4>Cues</h4>
         <VoiceToggle />
+        <h4>This device</h4>
+        <FullscreenToggle />
         <div className="sheet-grid">
           <button className="btn" onClick={() => (setMenu(false), openTuner())}>
             ✦ Tune the blob (T)
